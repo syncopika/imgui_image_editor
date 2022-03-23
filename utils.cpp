@@ -84,6 +84,12 @@ bool importImage(const char* filename, GLuint* tex, GLuint* originalImage, int* 
     return true;
 }
 
+void resizeSDLWindow(SDL_Window* window, int width, int height){
+    int widthbuffer = 100;
+    int heightbuffer = 200;
+    SDL_SetWindowSize(window, width + widthbuffer, height + heightbuffer);
+}
+
 void updateTempImageState(int imageWidth, int imageHeight){
     // take current image data in IMAGE_DISPLAY and
     // update TEMP_IMAGE with that data
@@ -114,7 +120,7 @@ void resetImageState(int imageWidth, int imageHeight){
     delete[] pixelData;
 }
 
-void showImageEditor(){
+void showImageEditor(SDL_Window* window){
     //ImGui::BeginChild("image editor", ImVec2(0, 800), true);
     static FilterParameters filterParams;
     static bool showImage = false;
@@ -124,6 +130,7 @@ void showImageEditor(){
     static int imageWidth = 0;
     static int imageChannels = 4; //rgba
     static char importImageFilepath[64] = "test_image.png";
+    static char exportImageName[64] = "";
     
     // for filters that have customizable parameters,
     // have a bool flag so we can toggle the params
@@ -146,6 +153,10 @@ void showImageEditor(){
             bool loaded = importImage(filepath.c_str(), &texture, &originalImage, &imageWidth, &imageHeight, &imageChannels);
             if(loaded){
                 showImage = true;
+                
+                // resize SDL window to fit image
+                resizeSDLWindow(window, imageWidth, imageHeight);
+                
             }else{
                 ImGui::Text("import image failed");
             }
@@ -238,6 +249,9 @@ void showImageEditor(){
             showChannelOffsetParams = false;
             updateTempImageState(imageWidth, imageHeight);
         }
+        
+        // spacer
+        ImGui::Dummy(ImVec2(0.0f, 2.0f));
         
         // RESET IMAGE
         if(ImGui::Button("reset image")){
@@ -343,15 +357,23 @@ void showImageEditor(){
         ImGui::Dummy(ImVec2(0.0f, 5.0f));
         
         // EXPORT IMAGE
-        if(ImGui::Button("export image (.bmp)")){
+        bool exportImageClicked = ImGui::Button("export image (.bmp)");
+        ImGui::SameLine();
+        ImGui::PushItemWidth(150);
+        ImGui::InputText("image name", exportImageName, 64);
+    
+        if(exportImageClicked){
             glActiveTexture(IMAGE_DISPLAY);
             glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
             
-            // TODO: allow image naming
-            // TODO: hardcoding 4 channels b/c not sure we were getting the right channel value back for the imageChannels variable?
-            stbi_write_bmp("image_editor_export.bmp", imageWidth, imageHeight, 4, (void *)pixelData);
+            std::string exportName(exportImageName);
+            if(exportName == ""){
+                exportName = std::string(importImageFilepath) + "-edit";
+            }
+            exportName += ".bmp";
+            
+            stbi_write_bmp(exportName.c_str(), imageWidth, imageHeight, 4, (void *)pixelData);
         }
-        
         
         delete[] pixelData;
     }
