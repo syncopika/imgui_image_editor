@@ -1,5 +1,7 @@
 #include "filters.hh"
 #include "utils.hh"
+#include <map>
+#include <iostream>
 
 #include "stb_image.h"
 #include "stb_image_write.h"
@@ -121,7 +123,6 @@ void resetImageState(int imageWidth, int imageHeight){
 }
 
 void showImageEditor(SDL_Window* window){
-    //ImGui::BeginChild("image editor", ImVec2(0, 800), true);
     static FilterParameters filterParams;
     static bool showImage = false;
     static GLuint texture;
@@ -134,11 +135,13 @@ void showImageEditor(SDL_Window* window){
     
     // for filters that have customizable parameters,
     // have a bool flag so we can toggle the params
-    static bool showSaturateParams = false;
-    static bool showOutlineParams = false;
-    static bool showMosaicParams = false;
-    static bool showChannelOffsetParams = false;
-    static bool showCrtParams = false;
+    static std::map<Filter, bool> filtersWithParams {
+        {Filter::Saturation, false},
+        {Filter::Outline, false},
+        {Filter::Mosaic, false},
+        {Filter::ChannelOffset, false},
+        {Filter::Crt, false}
+    };
     
     bool importImageClicked = ImGui::Button("import image");
     ImGui::SameLine();
@@ -156,7 +159,6 @@ void showImageEditor(SDL_Window* window){
                 
                 // resize SDL window to fit image
                 resizeSDLWindow(window, imageWidth, imageHeight);
-                
             }else{
                 ImGui::Text("import image failed");
             }
@@ -198,55 +200,35 @@ void showImageEditor(SDL_Window* window){
         
         // SATURATION
         if(ImGui::Button("saturate")){
-            showSaturateParams = !showSaturateParams;
-            showOutlineParams = false; // TODO: figure out better way to do this
-            showMosaicParams = false;
-            showChannelOffsetParams = false;
-            showCrtParams = false;
+            setFilterState(Filter::Saturation, filtersWithParams);
             updateTempImageState(imageWidth, imageHeight);
         }
         ImGui::SameLine();
         
         // OUTLINE
         if(ImGui::Button("outline")){
-            showOutlineParams = !showOutlineParams;
-            showSaturateParams = false;
-            showMosaicParams = false;
-            showChannelOffsetParams = false;
-            showCrtParams = false;
+            setFilterState(Filter::Outline, filtersWithParams);
             updateTempImageState(imageWidth, imageHeight);
         }
         ImGui::SameLine();
         
         // CHANNEL OFFSET
         if(ImGui::Button("channel offset")){
-            showChannelOffsetParams = !showChannelOffsetParams;
-            showSaturateParams = false;
-            showOutlineParams = false;
-            showMosaicParams = false;
-            showCrtParams = false;
+            setFilterState(Filter::ChannelOffset, filtersWithParams);
             updateTempImageState(imageWidth, imageHeight);
         }
         ImGui::SameLine();
         
         // MOSAIC
         if(ImGui::Button("mosaic")){
-            showMosaicParams = !showMosaicParams;
-            showSaturateParams = false;
-            showOutlineParams = false;
-            showChannelOffsetParams = false;
-            showCrtParams = false;
+            setFilterState(Filter::Mosaic, filtersWithParams);
             updateTempImageState(imageWidth, imageHeight);
         }
         ImGui::SameLine();
         
         // CRT
         if(ImGui::Button("crt")){
-            showCrtParams = !showCrtParams;
-            showMosaicParams = false;
-            showSaturateParams = false;
-            showOutlineParams = false;
-            showChannelOffsetParams = false;
+            setFilterState(Filter::Crt, filtersWithParams);
             updateTempImageState(imageWidth, imageHeight);
         }
         
@@ -259,7 +241,9 @@ void showImageEditor(SDL_Window* window){
             filterParams.generateRandNum3();
         }
         
-        if(showSaturateParams){
+        // show filter parameters
+        if(filtersWithParams[Filter::Saturation]){
+            ImGui::Text("saturation filter parameters");
             glActiveTexture(TEMP_IMAGE); // get current state - we'll edit this image data
             glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
             
@@ -275,7 +259,9 @@ void showImageEditor(SDL_Window* window){
             ImGui::SliderFloat("lumB", &filterParams.lumB, 0.0f, 5.0f);
         }
         
-        if(showOutlineParams){
+        if(filtersWithParams[Filter::Outline]){
+            ImGui::Text("outline filter parameters");
+            
             unsigned char* sourceImageCopy = new unsigned char[pixelDataLen];
             
             // use the current texture to get pixel data from (so we can stack filter effects)
@@ -294,7 +280,9 @@ void showImageEditor(SDL_Window* window){
             ImGui::SliderInt("color difference limit", &filterParams.outlineLimit, 1, 20);
         }
         
-        if(showMosaicParams){
+        if(filtersWithParams[Filter::Mosaic]){
+            ImGui::Text("mosaic filter parameters");
+            
             unsigned char* sourceImageCopy = new unsigned char[pixelDataLen];
             
             // use the current texture to get pixel data from (so we can stack filter effects)
@@ -313,7 +301,9 @@ void showImageEditor(SDL_Window* window){
             ImGui::SliderInt("mosaic chunk size", &filterParams.chunkSize, 1, 20);
         }
         
-        if(showChannelOffsetParams){
+        if(filtersWithParams[Filter::ChannelOffset]){
+            ImGui::Text("channel offset parameters");
+            
             unsigned char* sourceImageCopy = new unsigned char[pixelDataLen];
             
             // use the current texture to get pixel data from (so we can stack filter effects)
@@ -332,7 +322,9 @@ void showImageEditor(SDL_Window* window){
             ImGui::SliderInt("chan offset", &filterParams.chanOffset, 1, 15); // TODO: find out why using "channel offset" for the label produces an assertion error :0
         }
         
-        if(showCrtParams){
+        if(filtersWithParams[Filter::Crt]){
+            ImGui::Text("CRT (cathode-ray tube) filter parameters");
+            
             unsigned char* sourceImageCopy = new unsigned char[pixelDataLen];
             
             // use the current texture to get pixel data from (so we can stack filter effects)

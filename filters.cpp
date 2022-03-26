@@ -10,6 +10,15 @@ int correctRGB(int channel){
     return channel;
 }
 
+void setFilterState(Filter filterToSet, std::map<Filter, bool>& filters){
+    filters[filterToSet] = !filters[filterToSet];
+    for(auto const& f : filters){
+        if(f.first != filterToSet){
+            filters[f.first] = false;
+        }
+    }
+}
+
 void grayscale(unsigned char* pixelData, int pixelDataLen){
     for(int i = 0; i < pixelDataLen - 4; i+=4){
         unsigned char r = pixelData[i];
@@ -154,13 +163,13 @@ void crt(unsigned char* imageData, unsigned char* sourceImageCopy, int imageWidt
     // adapted from: https://github.com/libretro/glsl-shaders/blob/master/crt/shaders/crt-nes-mini.glsl
     for(int row = 0; row < imageHeight; row++){
         for(int col = 0; col < imageWidth; col++){
-            int selectHigh = row % params.scanLineThickness == 0 ? 1 : 0;
+            int selectHigh = (params.scanLineThickness > 0 && row % params.scanLineThickness == 0) ? 1 : 0;
             int selectLow = 1 - selectHigh;
             
             for(int i = 0; i < 3; i++){
                 float currChannel = sourceImageCopy[4*imageWidth*row + 4*col + i] / 255.0f;
-                float channelHigh = ((1.0 + params.brightboost) - (0.2 * currChannel)) * currChannel;
-                float channelLow = ((1.0 - params.intensity) + (0.1 * currChannel)) * currChannel;
+                float channelHigh = ((1.0f + params.brightboost) - (0.2f * currChannel)) * currChannel;
+                float channelLow = ((1.0f - params.intensity) + (0.1f * currChannel)) * currChannel;
                 float newColorVal = (selectLow * channelLow) + (selectHigh * channelHigh);
                 imageData[4*imageWidth*row + 4*col + i] = (unsigned char)(255.0f * newColorVal);
             }

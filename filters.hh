@@ -1,6 +1,7 @@
 #ifndef FILTERS
 #define FILTERS
 
+#include <map>
 #include <stdint.h> // for uint8_t
 #include <stdlib.h> // for rand()
 
@@ -31,7 +32,16 @@ struct FilterParameters {
     }
 };
 
+enum Filter {
+    Saturation,
+    Outline,
+    Mosaic,
+    ChannelOffset,
+    Crt
+};
+
 int correctRGB(int channel);
+void setFilterState(Filter filterToSet, std::map<Filter, bool>& filters);
 void grayscale(unsigned char* pixelData, int pixelDataLen);
 void saturate(unsigned char* pixelData, int pixelDataLen, FilterParameters& params);
 void outline(unsigned char* pixelData, unsigned char* sourceImageCopy, int imageWidth, int imageHeight, FilterParameters& params);
