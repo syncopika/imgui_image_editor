@@ -140,7 +140,8 @@ void showImageEditor(SDL_Window* window){
         {Filter::Outline, false},
         {Filter::Mosaic, false},
         {Filter::ChannelOffset, false},
-        {Filter::Crt, false}
+        {Filter::Crt, false},
+        {Filter::Voronoi, false}
     };
     
     bool importImageClicked = ImGui::Button("import image");
@@ -229,6 +230,13 @@ void showImageEditor(SDL_Window* window){
         // CRT
         if(ImGui::Button("crt")){
             setFilterState(Filter::Crt, filtersWithParams);
+            updateTempImageState(imageWidth, imageHeight);
+        }
+        ImGui::SameLine();
+        
+        // Voronoi
+        if(ImGui::Button("voronoi")){
+            setFilterState(Filter::Voronoi, filtersWithParams);
             updateTempImageState(imageWidth, imageHeight);
         }
         
@@ -343,6 +351,24 @@ void showImageEditor(SDL_Window* window){
             ImGui::SliderInt("scanline thickness", &filterParams.scanLineThickness, 0, 10);
             ImGui::SliderFloat("brightboost", &filterParams.brightboost, 0.0f, 1.0f);
             ImGui::SliderFloat("intensity", &filterParams.intensity, 0.0f, 1.0f);
+        }
+        
+        if(filtersWithParams[Filter::Voronoi]){
+            // TODO: this is a very expensive operation and should not be repeated for every frame
+            // if parameters did not change. need to figure out how to do that
+            // keep track of parameter changes in a struct?
+            // https://stackoverflow.com/questions/36017033/efficient-way-to-detect-changes-in-structure-members
+            
+            ImGui::Text("voronoi filter parameters");
+            glActiveTexture(TEMP_IMAGE);
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            
+            voronoi(pixelData, pixelDataLen, imageWidth, imageHeight, filterParams);
+            
+            glActiveTexture(IMAGE_DISPLAY);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            
+            ImGui::SliderInt("neighbor count", &filterParams.voronoiNeighborCount, 10, 60);
         }
         
         // spacer
