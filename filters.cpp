@@ -222,17 +222,20 @@ void voronoi(unsigned char* imageData, int pixelDataLen, int width, int height, 
 
     // get neighbors
     for(int i = 0; i < pixelDataLen - 4; i+=4){        
-        std::vector<int> pxCoords = getPixelCoords(i, width, height); // return index 0 = x, index 1 = y 
-        if(pxCoords[0] % (int)std::floor(width / neighborConstant) == 0 && 
-           pxCoords[1] % (int)std::floor(height / neighborConstant) == 0 && 
-           pxCoords[0] != 0){
+        std::pair<int, int> pxCoords = getPixelCoords(i, width, height);
+        
+        if(pxCoords.first == -1) continue;
+        
+        if(pxCoords.first % (int)std::floor(width / neighborConstant) == 0 && 
+           pxCoords.second % (int)std::floor(height / neighborConstant) == 0 && 
+           pxCoords.first != 0){
             // add some offset to each neighbor for randomness (we don't really want evenly spaced neighbors)
             int offset = rand() % 10;
             int sign = (rand() % 5 + 1) > 5 ? 1 : -1;  // if random num is > 5, positive sign
                
             // larger neighborConstant == more neighbors == more Voronoi shapes
-            int x = (sign * offset) + pxCoords[0];
-            int y = (sign * offset) + pxCoords[1];
+            int x = (sign * offset) + pxCoords.first;
+            int y = (sign * offset) + pxCoords.second;
             CustomPoint p1{x, y, imageData[i], imageData[i+1], imageData[i+2]};
             neighborList.push_back(p1);
         }
@@ -242,9 +245,11 @@ void voronoi(unsigned char* imageData, int pixelDataLen, int width, int height, 
     Node* kdtree = build2dTree(neighborList, 0);
     
     for(int i = 0; i < pixelDataLen - 4; i+=4){
-        std::vector<int> currCoords = getPixelCoords(i, width, height);
+        std::pair<int, int> currCoords = getPixelCoords(i, width, height);
         
-        CustomPoint nearestNeighbor = findNearestNeighbor(kdtree, currCoords[0], currCoords[1]);
+        if(currCoords.first == -1) continue;
+        
+        CustomPoint nearestNeighbor = findNearestNeighbor(kdtree, currCoords.first, currCoords.second);
         
         // found nearest neighbor. color the current pixel the color of the nearest neighbor. 
         imageData[i] = nearestNeighbor.r;

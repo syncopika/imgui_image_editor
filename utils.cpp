@@ -364,10 +364,10 @@ void showImageEditor(SDL_Window* window){
         }
         
         if(filtersWithParams[Filter::Voronoi]){
-            // TODO: this is a very expensive operation and should not be repeated for every frame
-            // if parameters did not change. need to figure out how to do that
-            // keep track of parameter changes in a struct?
-            // https://stackoverflow.com/questions/36017033/efficient-way-to-detect-changes-in-structure-members
+            // this is a very expensive operation and should not be repeated for every frame
+            // if parameters did not change. so for now, keep track of parameter changes in a struct
+            // and only run the filter when they change
+            // ideas? https://stackoverflow.com/questions/36017033/efficient-way-to-detect-changes-in-structure-members
             
             ImGui::Text("voronoi filter parameters");
             

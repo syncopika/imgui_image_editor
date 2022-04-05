@@ -1,6 +1,6 @@
 #include "voronoi_helper.hh"
 
-std::vector<int> getPixelCoords(int index, int width, int height){
+std::pair<int, int> getPixelCoords(int index, int width, int height){
     // assuming index represents the r channel of a pixel
     // index therefore represents the index of a pixel, since the pixel data
     // is laid out like r,g,b,a,r,g,b,a,... in the image data
@@ -9,17 +9,15 @@ std::vector<int> getPixelCoords(int index, int width, int height){
     // on the canvas.
     if((width*4) * height < index){
         // if index is out of bounds 
-        std::vector<int> emptyVec;
-        return emptyVec;
+        std::pair<int, int> emptyPair{-1, -1};
+        return emptyPair;
     }
     
     int pixelNum = std::floor(index / 4);
     int yCoord = std::floor(pixelNum / width); // find what row this pixel belongs in
     int xCoord = pixelNum - (yCoord * width); // find the difference between the pixel number of the pixel at the start of the row and this pixel 
     
-    std::vector<int> coords;
-    coords.push_back(xCoord);
-    coords.push_back(yCoord);
+    std::pair<int, int> coords{xCoord, yCoord};
     
     return coords;
 }
@@ -28,7 +26,7 @@ std::vector<int> getPixelCoords(int index, int width, int height){
 // using euclidean distance formula
 // however, we don't really need the sqrt when used in getting nearest neighbors since we only want to find the minimum distance
 float getDist(int x1, int x2, int y1, int y2){
-    return (float)(pow((x1 - x2), 2) + pow((y1 - y2), 2));
+    return (float)((x1 - x2) * (x1 - x2)) + ((y1 - y2) * (y1 - y2)); // TODO: check out pow() vs reg multiplication
 }
 
 // check if a Node is a leaf (both children are null)
@@ -128,7 +126,7 @@ Node* build2dTree(std::vector<CustomPoint> pointsList, int currDim){
 
 // recursive helper function for finding nearest neighbor of a given point's x and y coords 
 void findNearestNeighborHelper(Node* root, CustomPoint& nearestNeighbor, float& minDist, int x, int y){
-    float currDist = getDist(root->data[0], x, root->data[1], y);
+    float currDist = getDist(root->data.first, x, root->data.second, y);
     
     if(isLeaf(root)){
         if(currDist < minDist){
@@ -150,16 +148,16 @@ void findNearestNeighborHelper(Node* root, CustomPoint& nearestNeighbor, float& 
             
             if(currDimToCompare == x){
                 // is x greater than the current node's x? if so, we want to go right. else left.
-                if(x > root->data[0]){
+                if(x > root->data.first){
                     findNearestNeighborHelper(root->right, nearestNeighbor, minDist, x, y);
                     
                     // then, we check if the other subtree might actually have an even closer neighbor!
-                    if(x - minDist < root->data[0]){
+                    if(x - minDist < root->data.first){
                         findNearestNeighborHelper(root->left, nearestNeighbor, minDist, x, y);
                     }
                 }else{
                     findNearestNeighborHelper(root->left, nearestNeighbor, minDist, x, y);
-                    if(x + minDist > root->data[0]){
+                    if(x + minDist > root->data.first){
                         // x + record.minDist forms a circle. the circle in this case
                         // encompasses this current node's coordinates, so we can get closer to the query node
                         // by checking the right subtree
@@ -167,14 +165,14 @@ void findNearestNeighborHelper(Node* root, CustomPoint& nearestNeighbor, float& 
                     }
                 }
             }else{
-                if(y > root->data[1]){
+                if(y > root->data.second){
                     findNearestNeighborHelper(root->right, nearestNeighbor, minDist, x, y);
-                    if(y - minDist < root->data[1]){
+                    if(y - minDist < root->data.second){
                         findNearestNeighborHelper(root->left, nearestNeighbor, minDist, x, y);
                     }
                 }else{
                     findNearestNeighborHelper(root->left, nearestNeighbor, minDist, x, y);
-                    if(y + minDist > root->data[1]){
+                    if(y + minDist > root->data.second){
                         findNearestNeighborHelper(root->right, nearestNeighbor, minDist, x, y);
                     }
                 }
@@ -187,7 +185,7 @@ void findNearestNeighborHelper(Node* root, CustomPoint& nearestNeighbor, float& 
 CustomPoint findNearestNeighbor(Node* root, int x, int y){
     // set default values
     CustomPoint nearestNeighbor = root->point;
-    float minDist = getDist(root->data[0], x, root->data[1], y);
+    float minDist = getDist(root->data.first, x, root->data.second, y);
     
     findNearestNeighborHelper(root, nearestNeighbor, minDist, x, y);
     
