@@ -66,16 +66,6 @@ Node* build2dTree(std::vector<CustomPoint> pointsList, int currDim){
         return nullptr;
     }
     
-    // sort the current list in ascending order depending on the current dimension
-    char dim = (currDim == 0) ? 'x' : 'y';
-    std::sort(pointsList.begin(), pointsList.end(), [dim](const CustomPoint a, const CustomPoint b){
-        if(dim == 'x'){
-            return a.x < b.x;
-        }else{
-            return a.y < b.y;
-        }
-    });
-    
     if(pointsList.size() == 1){
         Node* newNode = new Node();
         newNode->data = {pointsList[0].x, pointsList[0].y};
@@ -101,6 +91,16 @@ Node* build2dTree(std::vector<CustomPoint> pointsList, int currDim){
         
         return newParent;
     }
+    
+    // sort the current list in ascending order depending on the current dimension
+    char dim = (currDim == 0) ? 'x' : 'y';
+    std::sort(pointsList.begin(), pointsList.end(), [dim](const CustomPoint a, const CustomPoint b){
+        if(dim == 'x'){
+            return a.x < b.x;
+        }else{
+            return a.y < b.y;
+        }
+    });
     
     // take the median point and set as new node
     int midIndex = (int)floor((pointsList.size() - 1) / 2);

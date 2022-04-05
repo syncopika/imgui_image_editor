@@ -124,6 +124,16 @@ void resetImageState(int imageWidth, int imageHeight){
 
 void showImageEditor(SDL_Window* window){
     static FilterParameters filterParams;
+    
+    // keep track of when param values for filters change
+    // this is a kinda weird way to do things but come back later to refactor ok?
+    static FilterParameters filterParamsDiff;
+    static bool initDiff = false;
+    if(!initDiff){
+        filterParamsDiff.voronoiNeighborCount = 0;
+        initDiff = true;
+    }
+    
     static bool showImage = false;
     static GLuint texture;
     static GLuint originalImage;
@@ -360,13 +370,18 @@ void showImageEditor(SDL_Window* window){
             // https://stackoverflow.com/questions/36017033/efficient-way-to-detect-changes-in-structure-members
             
             ImGui::Text("voronoi filter parameters");
-            glActiveTexture(TEMP_IMAGE);
-            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
             
-            voronoi(pixelData, pixelDataLen, imageWidth, imageHeight, filterParams);
+            if(filterParamsDiff.voronoiNeighborCount != filterParams.voronoiNeighborCount){   
+                glActiveTexture(TEMP_IMAGE);
+                glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
             
-            glActiveTexture(IMAGE_DISPLAY);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+                voronoi(pixelData, pixelDataLen, imageWidth, imageHeight, filterParams);
+                
+                filterParamsDiff.voronoiNeighborCount = filterParams.voronoiNeighborCount; // keep diff updated. TODO: make a function to sync the structs?
+                
+                glActiveTexture(IMAGE_DISPLAY);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            }
             
             ImGui::SliderInt("neighbor count", &filterParams.voronoiNeighborCount, 10, 60);
         }
