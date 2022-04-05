@@ -1,7 +1,10 @@
 #ifndef FILTERS
 #define FILTERS
 
+#include <iostream>
 #include <map>
+#include <utility>
+#include <vector>
 #include <stdint.h> // for uint8_t
 #include <stdlib.h> // for rand()
 
@@ -27,6 +30,9 @@ struct FilterParameters {
     float brightboost = 0.35f;
     float intensity = 0.25f;
     
+    // for Voronoi
+    int voronoiNeighborCount = 30;
+    
     void generateRandNum3(){
         chanOffsetRandNum = rand() % 3;
     }
@@ -37,7 +43,8 @@ enum Filter {
     Outline,
     Mosaic,
     ChannelOffset,
-    Crt
+    Crt,
+    Voronoi
 };
 
 int correctRGB(int channel);
@@ -49,5 +56,6 @@ void invert(unsigned char* pixelData, int pixelDataLen);
 void mosaic(unsigned char* imageData, unsigned char* sourceImageCopy, int imageWidth, int imageHeight, FilterParameters& params);
 void channelOffset(unsigned char* imageData, unsigned char* sourceImageCopy, int imageWidth, int imageHeight, FilterParameters& params);
 void crt(unsigned char* imageData, unsigned char* sourceImageCopy, int imageWidth, int imageHeight, FilterParameters& params);
+void voronoi(unsigned char* imageData, int pixelDataLen, int width, int height, FilterParameters& params);
 
 #endif

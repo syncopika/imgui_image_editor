@@ -18,14 +18,14 @@ OTHER_LIBS_DIR = external
 
 IMGUI_DIR = imgui
 SOURCES = image_editor.cpp
-SOURCES += stbi.cpp utils.cpp filters.cpp
+SOURCES += stbi.cpp utils.cpp filters.cpp voronoi_helper.cpp
 SOURCES += $(IMGUI_DIR)/imgui.cpp $(IMGUI_DIR)/imgui_demo.cpp $(IMGUI_DIR)/imgui_draw.cpp $(IMGUI_DIR)/imgui_tables.cpp $(IMGUI_DIR)/imgui_widgets.cpp
 
 # specific to our backend (sdl + opengl)
 SOURCES += $(IMGUI_DIR)/imgui_impl_sdl.cpp $(IMGUI_DIR)/imgui_impl_opengl3.cpp
 
 # note all the include flags for all the header file locations
-CXXFLAGS = -g -Wall -Wformat -std=c++14 -I$(SDL_INCLUDE) -I$(IMGUI_DIR) -I$(OTHER_LIBS_DIR) -I$(OPENGL_INCLUDE)
+CXXFLAGS = -g -O2 -Wall -Wformat -std=c++14 -I$(SDL_INCLUDE) -I$(IMGUI_DIR) -I$(OTHER_LIBS_DIR) -I$(OPENGL_INCLUDE)
 
 GLEW_LIBS = -lglew32 -lglu32
 
