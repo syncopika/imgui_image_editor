@@ -49,7 +49,7 @@ all: $(EXE)
 	@echo Build complete for $(ECHO_MESSAGE)
 
 $(EXE): $(OBJS)
-	$(CXX) -o $@ $^ $(CXXFLAGS) $(LIBS)
+	$(CXX) -o $@ $^ $(LIBS)
 
 clean:
 	rm -f $(OBJS)
