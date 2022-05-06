@@ -1,10 +1,15 @@
 #include "filters.hh"
 #include "utils.hh"
+
 #include <map>
 #include <iostream>
+#include <windows.h>
+#include <commctrl.h>
 
 #include "stb_image.h"
 #include "stb_image_write.h"
+
+#define FILEPATH_MAX_LENGTH 260
 
 #define TEMP_IMAGE GL_TEXTURE1
 #define IMAGE_DISPLAY GL_TEXTURE2
@@ -87,7 +92,7 @@ bool importImage(const char* filename, GLuint* tex, GLuint* originalImage, int* 
 }
 
 void resizeSDLWindow(SDL_Window* window, int width, int height){
-    int widthbuffer = 100;
+    int widthbuffer = 200;
     int heightbuffer = 200;
     SDL_SetWindowSize(window, width + widthbuffer, height + heightbuffer);
 }
@@ -140,8 +145,8 @@ void showImageEditor(SDL_Window* window){
     static int imageHeight = 0;
     static int imageWidth = 0;
     static int imageChannels = 4; //rgba
-    static char importImageFilepath[64] = "test_image.png";
-    static char exportImageName[64] = "";
+    static char importImageFilepath[FILEPATH_MAX_LENGTH] = "test_image.png";
+    static char exportImageName[FILEPATH_MAX_LENGTH] = "";
     
     // for filters that have customizable parameters,
     // have a bool flag so we can toggle the params
@@ -156,9 +161,21 @@ void showImageEditor(SDL_Window* window){
     
     bool importImageClicked = ImGui::Button("import image");
     ImGui::SameLine();
-    ImGui::InputText("filepath", importImageFilepath, 64);
+    ImGui::InputText("filepath", importImageFilepath, FILEPATH_MAX_LENGTH);
     
     if(importImageClicked){
+        // open file dialog to allow user to find and select an image
+        // TODO: set a flag to compile only this part if on Windows
+        OPENFILENAME ofn;
+        ZeroMemory(&ofn, sizeof(ofn));
+        ofn.lStructSize = sizeof(ofn);
+        ofn.lpstrFile = importImageFilepath;
+        ofn.nMaxFile = sizeof(importImageFilepath);
+        ofn.lpstrFilter = "Image Files\0*.bmp;*.png;*.jpg;*.jpeg\0\0";
+        ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+
+        GetOpenFileName(&ofn);
+        
         // set the texture (the imported image) to be used for the filters
         // until a new image is imported, the current one will be used
         std::string filepath(importImageFilepath);
