@@ -2,6 +2,7 @@
 #define IMAGE_EDITOR_UTILS
 
 #include "imgui.h"
+#include "filters.hh"
 
 #include <SDL.h>
 #include <string>
@@ -13,5 +14,8 @@ void updateTempImageState(int imageWidth, int imageHeight);
 void resetImageState(int imageWidth, int imageHeight);
 void resizeSDLWindow(SDL_Window* window, int width, int height);
 void showImageEditor(SDL_Window* window);
+
+void setFilter(Filter filter, std::map<Filter, bool>& filtersWithParams,  int imageWidth, int imageHeight);
+void doFilter(int imageWidth, int imageHeight, Filter filter, FilterParameters& filterParams);
 
 #endif

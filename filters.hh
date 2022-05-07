@@ -39,6 +39,8 @@ struct FilterParameters {
 };
 
 enum Filter {
+    Grayscale,
+    Invert,
     Saturation,
     Outline,
     Mosaic,
