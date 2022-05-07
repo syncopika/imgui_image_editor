@@ -14,6 +14,7 @@ void updateTempImageState(int imageWidth, int imageHeight);
 void resetImageState(int imageWidth, int imageHeight);
 void resizeSDLWindow(SDL_Window* window, int width, int height);
 void showImageEditor(SDL_Window* window);
+void rotateImage(int imageWidth, int imageHeight);
 
 void setFilter(Filter filter, std::map<Filter, bool>& filtersWithParams,  int imageWidth, int imageHeight);
 void doFilter(int imageWidth, int imageHeight, Filter filter, FilterParameters& filterParams);

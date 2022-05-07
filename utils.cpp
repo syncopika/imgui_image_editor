@@ -99,9 +99,39 @@ void resizeSDLWindow(SDL_Window* window, int width, int height){
     SDL_SetWindowSize(window, width + widthbuffer, height + heightbuffer);
 }
 
+void rotateImage(int imageWidth, int imageHeight){
+    // TODO: currently not working - I have no idea what I'm doing lol
+    // https://stackoverflow.com/questions/9312486/opengl-rotating-a-2d-texture
+    // https://lazyfoo.net/tutorials/OpenGL/12_rotation/index.php
+    glActiveTexture(IMAGE_DISPLAY);
+    
+    glPushMatrix();
+    
+    glLoadIdentity();
+    glTranslatef(imageWidth/2, imageHeight/2, 0);
+    glRotatef(90, 0, 0, 1); // 90 deg rotation
+    
+    glBegin(GL_QUADS);
+    
+    glTexCoord2d(0, 0);
+    glVertex2f(-imageWidth/2, -imageHeight/2);
+    
+    glTexCoord2d(1, 0);
+    glVertex2f(imageWidth/2, -imageHeight/2);
+    
+    glTexCoord2d(1, 1);
+    glVertex2f(imageWidth/2, imageHeight/2);
+    
+    glTexCoord2d(0, 1);
+    glVertex2f(-imageWidth/2, imageHeight/2);
+    
+    glEnd();
+    
+    glPopMatrix();
+}
+
 void updateTempImageState(int imageWidth, int imageHeight){
-    // take current image data in IMAGE_DISPLAY and
-    // update TEMP_IMAGE with that data
+    // take current image data in IMAGE_DISPLAY and update TEMP_IMAGE with that data
     int pixelDataLen = imageWidth*imageHeight*4; // 4 because rgba
     unsigned char* pixelData = new unsigned char[pixelDataLen];
         
@@ -279,6 +309,7 @@ void showImageEditor(SDL_Window* window){
                 resizeSDLWindow(window, imageWidth, imageHeight);
             }else{
                 ImGui::Text("import image failed");
+                showImage = false;
             }
         }
         
@@ -287,7 +318,7 @@ void showImageEditor(SDL_Window* window){
     
     if(showImage){
         if(ImGui::Button("rotate image")){
-            
+            rotateImage(imageWidth, imageHeight);
         }
         
         ImGui::Text("size = %d x %d", imageWidth, imageHeight);
