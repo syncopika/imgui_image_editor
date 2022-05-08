@@ -100,34 +100,28 @@ void resizeSDLWindow(SDL_Window* window, int width, int height){
 }
 
 void rotateImage(int imageWidth, int imageHeight){
-    // TODO: currently not working - I have no idea what I'm doing lol
-    // https://stackoverflow.com/questions/9312486/opengl-rotating-a-2d-texture
-    // https://lazyfoo.net/tutorials/OpenGL/12_rotation/index.php
+    int pixelDataLen = imageWidth*imageHeight*4;
+    unsigned char* pixelData = new unsigned char[pixelDataLen];
+    unsigned char* pixelDataCopy = new unsigned char[pixelDataLen];
+    
     glActiveTexture(IMAGE_DISPLAY);
+    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelDataCopy);
     
-    glPushMatrix();
+    // rotate the pixel data and write it back
+    // https://stackoverflow.com/questions/16684856/rotating-a-2d-pixel-array-by-90-degrees
+    int cols = imageWidth*4;
+    int rows = imageHeight;
+    for(int i = 0; i < cols; i++){
+        for(int j = 0; j < rows; j++){
+            pixelData[i+(j*4*imageWidth)] = pixelDataCopy[((rows-1-j)*4*imageWidth)+i];
+        }
+    }
+    // swap width and height depending on rotation?
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
     
-    glLoadIdentity();
-    glTranslatef(imageWidth/2, imageHeight/2, 0);
-    glRotatef(90, 0, 0, 1); // 90 deg rotation
-    
-    glBegin(GL_QUADS);
-    
-    glTexCoord2d(0, 0);
-    glVertex2f(-imageWidth/2, -imageHeight/2);
-    
-    glTexCoord2d(1, 0);
-    glVertex2f(imageWidth/2, -imageHeight/2);
-    
-    glTexCoord2d(1, 1);
-    glVertex2f(imageWidth/2, imageHeight/2);
-    
-    glTexCoord2d(0, 1);
-    glVertex2f(-imageWidth/2, imageHeight/2);
-    
-    glEnd();
-    
-    glPopMatrix();
+    delete[] pixelData;
+    delete[] pixelDataCopy;
 }
 
 void updateTempImageState(int imageWidth, int imageHeight){
