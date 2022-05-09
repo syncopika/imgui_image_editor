@@ -3,11 +3,11 @@ CXX = g++
 # using mingw32
 ECHO_MESSAGE = "MinGW"
 
-# -LC:\libraries\SDL2-2.0.10\i686-w64-mingw32\lib -lSDL2main -lSDL2
-SDL_LIB = C:\SDL2\lib -lSDL2main -lSDL2
+# C:\SDL2\lib -lSDL2main -lSDL2
+SDL_LIB = C:\libraries\SDL2-2.0.10\i686-w64-mingw32\lib -lSDL2main -lSDL2
 
-# -IC:\libraries\SDL2-2.0.10\i686-w64-mingw32\include\SDL2
-SDL_INCLUDE = C:\SDL2\include\SDL2
+# -C:\SDL2\include\SDL2
+SDL_INCLUDE = C:\libraries\SDL2-2.0.10\i686-w64-mingw32\include\SDL2
 
 #C:\libraries\glew-2.1.0\include
 OPENGL_INCLUDE = C:\glew-2.1.0\include
@@ -29,7 +29,7 @@ CXXFLAGS = -g -O2 -Wall -Wformat -std=c++14 -I$(SDL_INCLUDE) -I$(IMGUI_DIR) -I$(
 
 GLEW_LIBS = -lglew32 -lglu32
 
-# add '-mwindows' to LIBS to prevent an additional command line terminal from appearing (but it's useful for debugging)
+# add '-mwindows' to LIBS to prevent an additional command line terminal from appearing (but it's useful for debugging) but also if using -DWINDOWS_BUILD
 LIBS = -mwindows -lmingw32 -lgdi32 $(GLEW_LIBS) -lopengl32 -limm32 -static-libstdc++ -static-libgcc -L$(SDL_LIB)
 
 # object files needed

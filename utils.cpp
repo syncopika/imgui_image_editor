@@ -99,7 +99,7 @@ void resizeSDLWindow(SDL_Window* window, int width, int height){
     SDL_SetWindowSize(window, width + widthbuffer, height + heightbuffer);
 }
 
-void rotateImage(int imageWidth, int imageHeight){
+void rotateImage(int& imageWidth, int& imageHeight){
     int pixelDataLen = imageWidth*imageHeight*4;
     unsigned char* pixelData = new unsigned char[pixelDataLen];
     unsigned char* pixelDataCopy = new unsigned char[pixelDataLen];
@@ -112,12 +112,24 @@ void rotateImage(int imageWidth, int imageHeight){
     // https://stackoverflow.com/questions/16684856/rotating-a-2d-pixel-array-by-90-degrees
     int cols = imageWidth*4;
     int rows = imageHeight;
-    for(int i = 0; i < cols; i++){
-        for(int j = 0; j < rows; j++){
-            pixelData[i+(j*4*imageWidth)] = pixelDataCopy[((rows-1-j)*4*imageWidth)+i];
+    
+    int counter = 0;
+    for(int i = 0; i < cols; i += 4){
+        for(int j = rows-1; j >= 0; j--){
+            // make sure to 'move' the whole pixel, which means 4 channels
+            pixelData[counter++] = pixelDataCopy[(j*4*imageWidth)+i]; //r
+            pixelData[counter++] = pixelDataCopy[(j*4*imageWidth)+i+1]; //g
+            pixelData[counter++] = pixelDataCopy[(j*4*imageWidth)+i+2]; //b
+            pixelData[counter++] = pixelDataCopy[(j*4*imageWidth)+i+3]; //a
         }
     }
-    // swap width and height depending on rotation?
+    // swap image height and width
+    int temp = imageWidth;
+    imageWidth = imageHeight;
+    imageHeight = temp;
+    
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+    glActiveTexture(TEMP_IMAGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
     
     delete[] pixelData;
@@ -137,7 +149,9 @@ void updateTempImageState(int imageWidth, int imageHeight){
     delete[] pixelData;
 }
 
-void resetImageState(int imageWidth, int imageHeight){
+void resetImageState(int& imageWidth, int& imageHeight, int originalWidth, int originalHeight){
+    imageWidth = originalWidth;
+    imageHeight = originalHeight;
     int pixelDataLen = imageWidth*imageHeight*4; // 4 because rgba
     unsigned char* pixelData = new unsigned char[pixelDataLen];
         
@@ -145,9 +159,9 @@ void resetImageState(int imageWidth, int imageHeight){
     glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
     
     // update temp image and display image
-    glActiveTexture(TEMP_IMAGE);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
     glActiveTexture(IMAGE_DISPLAY);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);    
+    glActiveTexture(TEMP_IMAGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
     
     delete[] pixelData;
@@ -251,6 +265,8 @@ void showImageEditor(SDL_Window* window){
     static bool showImage = false;
     static int imageHeight = 0;
     static int imageWidth = 0;
+    static int originalImageHeight = 0;
+    static int originalImageWidth = 0;
     static int imageChannels = 4; //rgba
     static char importImageFilepath[FILEPATH_MAX_LENGTH] = "test_image.png";
     static char exportImageName[FILEPATH_MAX_LENGTH] = "";
@@ -301,6 +317,8 @@ void showImageEditor(SDL_Window* window){
             if(loaded){
                 showImage = true;
                 resizeSDLWindow(window, imageWidth, imageHeight);
+                originalImageWidth = imageWidth;
+                originalImageHeight = imageHeight;
             }else{
                 ImGui::Text("import image failed");
                 showImage = false;
@@ -372,7 +390,7 @@ void showImageEditor(SDL_Window* window){
         
         // RESET IMAGE
         if(ImGui::Button("reset image")){
-            resetImageState(imageWidth, imageHeight);
+            resetImageState(imageWidth, imageHeight, originalImageWidth, originalImageHeight);
             filterParams.generateRandNum3();
         }
         
