@@ -1,10 +1,17 @@
-#include "filters.hh"
 #include "utils.hh"
+
 #include <map>
 #include <iostream>
 
+#if WINDOWS_BUILD
+#include <windows.h>
+#include <commctrl.h>
+#endif
+
 #include "stb_image.h"
 #include "stb_image_write.h"
+
+#define FILEPATH_MAX_LENGTH 260
 
 #define TEMP_IMAGE GL_TEXTURE1
 #define IMAGE_DISPLAY GL_TEXTURE2
@@ -87,14 +94,50 @@ bool importImage(const char* filename, GLuint* tex, GLuint* originalImage, int* 
 }
 
 void resizeSDLWindow(SDL_Window* window, int width, int height){
-    int widthbuffer = 100;
+    int widthbuffer = 200;
     int heightbuffer = 200;
     SDL_SetWindowSize(window, width + widthbuffer, height + heightbuffer);
 }
 
+void rotateImage(int& imageWidth, int& imageHeight){
+    int pixelDataLen = imageWidth*imageHeight*4;
+    unsigned char* pixelData = new unsigned char[pixelDataLen];
+    unsigned char* pixelDataCopy = new unsigned char[pixelDataLen];
+    
+    glActiveTexture(IMAGE_DISPLAY);
+    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelDataCopy);
+    
+    // rotate the pixel data and write it back
+    // https://stackoverflow.com/questions/16684856/rotating-a-2d-pixel-array-by-90-degrees
+    int cols = imageWidth*4;
+    int rows = imageHeight;
+    
+    int counter = 0;
+    for(int i = 0; i < cols; i += 4){
+        for(int j = rows-1; j >= 0; j--){
+            // make sure to 'move' the whole pixel, which means 4 channels
+            pixelData[counter++] = pixelDataCopy[(j*4*imageWidth)+i]; //r
+            pixelData[counter++] = pixelDataCopy[(j*4*imageWidth)+i+1]; //g
+            pixelData[counter++] = pixelDataCopy[(j*4*imageWidth)+i+2]; //b
+            pixelData[counter++] = pixelDataCopy[(j*4*imageWidth)+i+3]; //a
+        }
+    }
+    // swap image height and width
+    int temp = imageWidth;
+    imageWidth = imageHeight;
+    imageHeight = temp;
+    
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+    glActiveTexture(TEMP_IMAGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+    
+    delete[] pixelData;
+    delete[] pixelDataCopy;
+}
+
 void updateTempImageState(int imageWidth, int imageHeight){
-    // take current image data in IMAGE_DISPLAY and
-    // update TEMP_IMAGE with that data
+    // take current image data in IMAGE_DISPLAY and update TEMP_IMAGE with that data
     int pixelDataLen = imageWidth*imageHeight*4; // 4 because rgba
     unsigned char* pixelData = new unsigned char[pixelDataLen];
         
@@ -106,7 +149,9 @@ void updateTempImageState(int imageWidth, int imageHeight){
     delete[] pixelData;
 }
 
-void resetImageState(int imageWidth, int imageHeight){
+void resetImageState(int& imageWidth, int& imageHeight, int originalWidth, int originalHeight){
+    imageWidth = originalWidth;
+    imageHeight = originalHeight;
     int pixelDataLen = imageWidth*imageHeight*4; // 4 because rgba
     unsigned char* pixelData = new unsigned char[pixelDataLen];
         
@@ -114,37 +159,120 @@ void resetImageState(int imageWidth, int imageHeight){
     glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
     
     // update temp image and display image
-    glActiveTexture(TEMP_IMAGE);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
     glActiveTexture(IMAGE_DISPLAY);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);    
+    glActiveTexture(TEMP_IMAGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
     
     delete[] pixelData;
 }
 
-void showImageEditor(SDL_Window* window){
-    static FilterParameters filterParams;
-    
-    // keep track of when param values for filters change
-    // this is a kinda weird way to do things but come back later to refactor ok?
-    static FilterParameters filterParamsDiff;
-    static bool initDiff = false;
-    if(!initDiff){
-        filterParamsDiff.voronoiNeighborCount = 0;
-        initDiff = true;
+void setFilter(Filter filter, std::map<Filter, bool>& filtersWithParams, int imageWidth, int imageHeight){
+    setFilterState(filter, filtersWithParams);
+    updateTempImageState(imageWidth, imageHeight);
+}
+
+void doFilter(int imageWidth, int imageHeight, Filter filter, FilterParameters& filterParams){
+    // allocate memory for the image 
+    int pixelDataLen = imageWidth*imageHeight*4; // 4 because rgba
+    unsigned char* pixelData = new unsigned char[pixelDataLen];
+            
+    // do the thing
+    switch(filter){
+        case Filter::Grayscale:
+            glActiveTexture(IMAGE_DISPLAY);
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            grayscale(pixelData, pixelDataLen);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            break;
+        case Filter::Invert:
+            glActiveTexture(IMAGE_DISPLAY);
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            invert(pixelData, pixelDataLen);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            break;
+        case Filter::Saturation:
+            glActiveTexture(TEMP_IMAGE);
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            saturate(pixelData, pixelDataLen, filterParams);
+            glActiveTexture(IMAGE_DISPLAY);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            break;
+        case Filter::Outline: {
+            unsigned char* sourceImageCopy = new unsigned char[pixelDataLen];
+            glActiveTexture(TEMP_IMAGE);
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, sourceImageCopy);
+            outline(pixelData, sourceImageCopy, imageWidth, imageHeight, filterParams);
+            glActiveTexture(IMAGE_DISPLAY);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            delete[] sourceImageCopy;            
+            break;
+        }
+        case Filter::Mosaic: {
+            unsigned char* sourceImageCopy = new unsigned char[pixelDataLen];
+            glActiveTexture(TEMP_IMAGE);
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, sourceImageCopy);
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            mosaic(pixelData, sourceImageCopy, imageWidth, imageHeight, filterParams);
+            glActiveTexture(IMAGE_DISPLAY);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            delete[] sourceImageCopy;
+            break;
+        }
+        case Filter::ChannelOffset: {
+            unsigned char* sourceImageCopy = new unsigned char[pixelDataLen];
+            glActiveTexture(TEMP_IMAGE);
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, sourceImageCopy);
+            channelOffset(pixelData, sourceImageCopy, imageWidth, imageHeight, filterParams);
+            glActiveTexture(IMAGE_DISPLAY);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            delete[] sourceImageCopy;
+            break;
+        }
+        case Filter::Crt: {
+            unsigned char* sourceImageCopy = new unsigned char[pixelDataLen];
+            glActiveTexture(TEMP_IMAGE);
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, sourceImageCopy);
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            crt(pixelData, sourceImageCopy, imageWidth, imageHeight, filterParams);
+            glActiveTexture(IMAGE_DISPLAY);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            delete[] sourceImageCopy;            
+            break;
+        }
+        case Filter::Voronoi: {
+            glActiveTexture(TEMP_IMAGE);
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            voronoi(pixelData, pixelDataLen, imageWidth, imageHeight, filterParams);
+            glActiveTexture(IMAGE_DISPLAY);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            break;
+        }
+        default:
+            break;
     }
     
-    static bool showImage = false;
+    // reclaim memory
+    delete[] pixelData;
+}
+
+void showImageEditor(SDL_Window* window){
+    static FilterParameters filterParams;
     static GLuint texture;
     static GLuint originalImage;
+    static bool showImage = false;
     static int imageHeight = 0;
     static int imageWidth = 0;
+    static int originalImageHeight = 0;
+    static int originalImageWidth = 0;
     static int imageChannels = 4; //rgba
-    static char importImageFilepath[64] = "test_image.png";
-    static char exportImageName[64] = "";
+    static char importImageFilepath[FILEPATH_MAX_LENGTH] = "test_image.png";
+    static char exportImageName[FILEPATH_MAX_LENGTH] = "";
     
     // for filters that have customizable parameters,
-    // have a bool flag so we can toggle the params
+    // have a bool flag so we can toggle the params for a specific filter
     static std::map<Filter, bool> filtersWithParams {
         {Filter::Saturation, false},
         {Filter::Outline, false},
@@ -156,22 +284,44 @@ void showImageEditor(SDL_Window* window){
     
     bool importImageClicked = ImGui::Button("import image");
     ImGui::SameLine();
-    ImGui::InputText("filepath", importImageFilepath, 64);
+    ImGui::InputText("filepath", importImageFilepath, FILEPATH_MAX_LENGTH);
     
     if(importImageClicked){
+        // open file dialog to allow user to find and select an image if windows.h is available
+        #if WINDOWS_BUILD
+        OPENFILENAME ofn;
+        ZeroMemory(&ofn, sizeof(ofn));
+        ofn.lStructSize = sizeof(ofn);
+        ofn.lpstrFile = importImageFilepath;
+        ofn.nMaxFile = sizeof(importImageFilepath);
+        ofn.lpstrFilter = "Image Files\0*.bmp;*.png;*.jpg;*.jpeg\0\0";
+        ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+
+        GetOpenFileName(&ofn);
+        #endif
+        
         // set the texture (the imported image) to be used for the filters
         // until a new image is imported, the current one will be used
         std::string filepath(importImageFilepath);
         
         if(trimString(filepath) != ""){
-            bool loaded = importImage(filepath.c_str(), &texture, &originalImage, &imageWidth, &imageHeight, &imageChannels);
+            bool loaded = importImage(
+                filepath.c_str(), 
+                &texture, 
+                &originalImage, 
+                &imageWidth, 
+                &imageHeight, 
+                &imageChannels
+            );
+            
             if(loaded){
                 showImage = true;
-                
-                // resize SDL window to fit image
                 resizeSDLWindow(window, imageWidth, imageHeight);
+                originalImageWidth = imageWidth;
+                originalImageHeight = imageHeight;
             }else{
                 ImGui::Text("import image failed");
+                showImage = false;
             }
         }
         
@@ -179,75 +329,60 @@ void showImageEditor(SDL_Window* window){
     }
     
     if(showImage){
-        // TODO: get an open file dialog working?
+        if(ImGui::Button("rotate image")){
+            rotateImage(imageWidth, imageHeight);
+        }
+        
         ImGui::Text("size = %d x %d", imageWidth, imageHeight);
+        
         ImGui::Image((void *)(intptr_t)texture, ImVec2(imageWidth, imageHeight));
         //ImGui::Text("image imported");
-        
-        int pixelDataLen = imageWidth*imageHeight*4; // 4 because rgba
-        unsigned char* pixelData = new unsigned char[pixelDataLen];
-        
+     
         // GRAYSCALE
         if(ImGui::Button("grayscale")){
-            // get current image
-            glActiveTexture(IMAGE_DISPLAY);
-            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData); // uses currently bound texture from importImage()
-            
-            grayscale(pixelData, pixelDataLen);
-            
-            // write it back
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            doFilter(imageWidth, imageHeight, Filter::Grayscale, filterParams);
         }
         ImGui::SameLine();
         
         // INVERT
         if(ImGui::Button("invert")){
-            glActiveTexture(IMAGE_DISPLAY);
-            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData); // uses currently bound texture from importImage()
-            invert(pixelData, pixelDataLen);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            doFilter(imageWidth, imageHeight, Filter::Invert, filterParams);
         }
         ImGui::SameLine();
         
         // SATURATION
         if(ImGui::Button("saturate")){
-            setFilterState(Filter::Saturation, filtersWithParams);
-            updateTempImageState(imageWidth, imageHeight);
+            setFilter(Filter::Saturation, filtersWithParams, imageWidth, imageHeight);
         }
         ImGui::SameLine();
         
         // OUTLINE
         if(ImGui::Button("outline")){
-            setFilterState(Filter::Outline, filtersWithParams);
-            updateTempImageState(imageWidth, imageHeight);
+            setFilter(Filter::Outline, filtersWithParams, imageWidth, imageHeight);
         }
         ImGui::SameLine();
         
         // CHANNEL OFFSET
         if(ImGui::Button("channel offset")){
-            setFilterState(Filter::ChannelOffset, filtersWithParams);
-            updateTempImageState(imageWidth, imageHeight);
+            setFilter(Filter::ChannelOffset, filtersWithParams, imageWidth, imageHeight);
         }
         ImGui::SameLine();
         
         // MOSAIC
         if(ImGui::Button("mosaic")){
-            setFilterState(Filter::Mosaic, filtersWithParams);
-            updateTempImageState(imageWidth, imageHeight);
+            setFilter(Filter::Mosaic, filtersWithParams, imageWidth, imageHeight);
         }
         ImGui::SameLine();
         
         // CRT
         if(ImGui::Button("crt")){
-            setFilterState(Filter::Crt, filtersWithParams);
-            updateTempImageState(imageWidth, imageHeight);
+            setFilter(Filter::Crt, filtersWithParams, imageWidth, imageHeight);
         }
         ImGui::SameLine();
         
         // Voronoi
         if(ImGui::Button("voronoi")){
-            setFilterState(Filter::Voronoi, filtersWithParams);
-            updateTempImageState(imageWidth, imageHeight);
+            setFilter(Filter::Voronoi, filtersWithParams, imageWidth, imageHeight);
         }
         
         // spacer
@@ -255,135 +390,63 @@ void showImageEditor(SDL_Window* window){
         
         // RESET IMAGE
         if(ImGui::Button("reset image")){
-            resetImageState(imageWidth, imageHeight);
+            resetImageState(imageWidth, imageHeight, originalImageWidth, originalImageHeight);
             filterParams.generateRandNum3();
         }
         
-        // show filter parameters
         if(filtersWithParams[Filter::Saturation]){
             ImGui::Text("saturation filter parameters");
-            glActiveTexture(TEMP_IMAGE); // get current state - we'll edit this image data
-            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
             
-            saturate(pixelData, pixelDataLen, filterParams);
+            // d = delta
+            bool d1 = ImGui::SliderFloat("saturation val", &filterParams.saturationVal, 0.0f, 5.0f);
+            bool d2 = ImGui::SliderFloat("lumR", &filterParams.lumR, 0.0f, 5.0f);
+            bool d3 = ImGui::SliderFloat("lumG", &filterParams.lumG, 0.0f, 5.0f);
+            bool d4 = ImGui::SliderFloat("lumB", &filterParams.lumB, 0.0f, 5.0f);
             
-            // after editing pixel data, write it to the other texture
-            glActiveTexture(IMAGE_DISPLAY);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
-            
-            ImGui::SliderFloat("saturation val", &filterParams.saturationVal, 0.0f, 5.0f);
-            ImGui::SliderFloat("lumR", &filterParams.lumR, 0.0f, 5.0f);
-            ImGui::SliderFloat("lumG", &filterParams.lumG, 0.0f, 5.0f);
-            ImGui::SliderFloat("lumB", &filterParams.lumB, 0.0f, 5.0f);
+            // if any of the saturation parameters change, re-run the filter
+            if(d1 || d2 || d3 || d4){
+                doFilter(imageWidth, imageHeight, Filter::Saturation, filterParams);
+            }
         }
         
         if(filtersWithParams[Filter::Outline]){
             ImGui::Text("outline filter parameters");
-            
-            unsigned char* sourceImageCopy = new unsigned char[pixelDataLen];
-            
-            // use the current texture to get pixel data from (so we can stack filter effects)
-            glActiveTexture(TEMP_IMAGE);
-            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
-            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, sourceImageCopy);
-            
-            outline(pixelData, sourceImageCopy, imageWidth, imageHeight, filterParams);
-            
-            delete[] sourceImageCopy;
-            
-            // after editing pixel data, write it to the other texture
-            glActiveTexture(IMAGE_DISPLAY);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
-            
-            ImGui::SliderInt("color difference limit", &filterParams.outlineLimit, 1, 20);
+            if(ImGui::SliderInt("color difference limit", &filterParams.outlineLimit, 1, 20)){
+                doFilter(imageWidth, imageHeight, Filter::Outline, filterParams);
+            }
         }
         
         if(filtersWithParams[Filter::Mosaic]){
             ImGui::Text("mosaic filter parameters");
-            
-            unsigned char* sourceImageCopy = new unsigned char[pixelDataLen];
-            
-            // use the current texture to get pixel data from (so we can stack filter effects)
-            glActiveTexture(TEMP_IMAGE);
-            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, sourceImageCopy);
-            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
-            
-            mosaic(pixelData, sourceImageCopy, imageWidth, imageHeight, filterParams);
-            
-            delete[] sourceImageCopy;
-            
-            // after editing pixel data, write it to the other texture
-            glActiveTexture(IMAGE_DISPLAY);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
-            
-            ImGui::SliderInt("mosaic chunk size", &filterParams.chunkSize, 1, 20);
+            if(ImGui::SliderInt("mosaic chunk size", &filterParams.chunkSize, 1, 20)){
+                doFilter(imageWidth, imageHeight, Filter::Mosaic, filterParams);
+            }
         }
         
         if(filtersWithParams[Filter::ChannelOffset]){
             ImGui::Text("channel offset parameters");
-            
-            unsigned char* sourceImageCopy = new unsigned char[pixelDataLen];
-            
-            // use the current texture to get pixel data from (so we can stack filter effects)
-            glActiveTexture(TEMP_IMAGE);
-            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
-            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, sourceImageCopy);
-            
-            channelOffset(pixelData, sourceImageCopy, imageWidth, imageHeight, filterParams);
-            
-            delete[] sourceImageCopy;
-            
-            // after editing pixel data, write it to the other texture
-            glActiveTexture(IMAGE_DISPLAY);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
-            
-            ImGui::SliderInt("chan offset", &filterParams.chanOffset, 1, 15); // TODO: find out why using "channel offset" for the label produces an assertion error :0
+            if(ImGui::SliderInt("chan offset", &filterParams.chanOffset, 1, 15)){ // TODO: find out why using "channel offset" for the label produces an assertion error :0
+                doFilter(imageWidth, imageHeight, Filter::ChannelOffset, filterParams);
+            }
         }
         
         if(filtersWithParams[Filter::Crt]){
             ImGui::Text("CRT (cathode-ray tube) filter parameters");
             
-            unsigned char* sourceImageCopy = new unsigned char[pixelDataLen];
-            
-            // use the current texture to get pixel data from (so we can stack filter effects)
-            glActiveTexture(TEMP_IMAGE);
-            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, sourceImageCopy);
-            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
-            
-            crt(pixelData, sourceImageCopy, imageWidth, imageHeight, filterParams);
-            
-            delete[] sourceImageCopy;
-            
-            // after editing pixel data, write it to the other texture
-            glActiveTexture(IMAGE_DISPLAY);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
-            
-            ImGui::SliderInt("scanline thickness", &filterParams.scanLineThickness, 0, 10);
-            ImGui::SliderFloat("brightboost", &filterParams.brightboost, 0.0f, 1.0f);
-            ImGui::SliderFloat("intensity", &filterParams.intensity, 0.0f, 1.0f);
+            bool d1 = ImGui::SliderInt("scanline thickness", &filterParams.scanLineThickness, 0, 10);
+            bool d2 = ImGui::SliderFloat("brightboost", &filterParams.brightboost, 0.0f, 1.0f);
+            bool d3 = ImGui::SliderFloat("intensity", &filterParams.intensity, 0.0f, 1.0f);
+
+            if(d1 || d2 || d3){
+                doFilter(imageWidth, imageHeight, Filter::Crt, filterParams);
+            }
         }
         
         if(filtersWithParams[Filter::Voronoi]){
-            // this is a very expensive operation and should not be repeated for every frame
-            // if parameters did not change. so for now, keep track of parameter changes in a struct
-            // and only run the filter when they change
-            // ideas? https://stackoverflow.com/questions/36017033/efficient-way-to-detect-changes-in-structure-members
-            
             ImGui::Text("voronoi filter parameters");
-            
-            if(filterParamsDiff.voronoiNeighborCount != filterParams.voronoiNeighborCount){   
-                glActiveTexture(TEMP_IMAGE);
-                glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
-            
-                voronoi(pixelData, pixelDataLen, imageWidth, imageHeight, filterParams);
-                
-                filterParamsDiff.voronoiNeighborCount = filterParams.voronoiNeighborCount; // keep diff updated. TODO: make a function to sync the structs?
-                
-                glActiveTexture(IMAGE_DISPLAY);
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            if(ImGui::SliderInt("neighbor count", &filterParams.voronoiNeighborCount, 10, 60)){
+                doFilter(imageWidth, imageHeight, Filter::Voronoi, filterParams);
             }
-            
-            ImGui::SliderInt("neighbor count", &filterParams.voronoiNeighborCount, 10, 60);
         }
         
         // spacer
@@ -393,22 +456,37 @@ void showImageEditor(SDL_Window* window){
         bool exportImageClicked = ImGui::Button("export image (.bmp)");
         ImGui::SameLine();
         ImGui::PushItemWidth(150);
-        ImGui::InputText("image name", exportImageName, 64);
-    
+        ImGui::InputText("image name", exportImageName, 64); // TODO: is this long enough?
+        
+        std::string exportName(exportImageName);
         if(exportImageClicked){
             glActiveTexture(IMAGE_DISPLAY);
+            
+            int pixelDataLen = imageWidth*imageHeight*4;
+            unsigned char* pixelData = new unsigned char[pixelDataLen];
+        
             glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
             
-            std::string exportName(exportImageName);
             if(exportName == ""){
-                exportName = std::string(importImageFilepath) + "-edit";
+                exportName = std::string(importImageFilepath) + "-edit"; // this will include the original image's extension?
             }
             exportName += ".bmp";
             
             stbi_write_bmp(exportName.c_str(), imageWidth, imageHeight, 4, (void *)pixelData);
+            
+            delete[] pixelData;
+            
+            ImGui::OpenPopup("message"); // show popup
         }
         
-        delete[] pixelData;
+        // signal that the image export happened in popup
+        if(ImGui::BeginPopupModal("message")){
+            ImGui::Text((std::string("exported image: ") + exportName).c_str());
+            if(ImGui::Button("close")){
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
     }
     
     //ImGui::EndChild();
