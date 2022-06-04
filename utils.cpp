@@ -323,7 +323,7 @@ void showImageEditor(SDL_Window* window){
     static int imageChannels = 4; //rgba
     static char importImageFilepath[FILEPATH_MAX_LENGTH] = "test_image.png";
     static char exportImageName[FILEPATH_MAX_LENGTH] = "";
-static std::vector<int> selectedPixelColor{0, 0, 0, 255};
+    static std::vector<int> selectedPixelColor{0, 0, 0, 255};
     
     // for filters that have customizable parameters,
     // have a bool flag so we can toggle the params for a specific filter
