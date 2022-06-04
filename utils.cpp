@@ -1,6 +1,9 @@
 #include "utils.hh"
 
 #include <map>
+#include <string>
+#include <sstream>
+#include <vector>
 #include <iostream>
 
 #if WINDOWS_BUILD
@@ -27,6 +30,13 @@ std::string trimString(std::string& str){
     }
     return trimmed;
 }
+
+std::string colorText(int r, int g, int b){
+    std::ostringstream output;
+    output << "rgb(" << r << "," << g << "," << b << ")";
+    return output.str();
+}
+
 
 // https://github.com/ocornut/imgui/wiki/Image-Loading-and-Displaying-Examples
 bool importImage(const char* filename, GLuint* tex, GLuint* originalImage, int* width, int* height, int* channels){
@@ -258,6 +268,49 @@ void doFilter(int imageWidth, int imageHeight, Filter filter, FilterParameters& 
     delete[] pixelData;
 }
 
+std::vector<int> extractPixelColor(int xCoord, int yCoord, int imageWidth, int imageHeight){
+    int pixelDataLen = imageWidth*imageHeight*4;
+    unsigned char* imageData = new unsigned char[pixelDataLen];
+    
+    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, imageData);
+    
+    int r = (int)imageData[xCoord*4 + yCoord*imageWidth*4];
+    int g = (int)imageData[xCoord*4 + yCoord*imageWidth*4 + 1];
+    int b = (int)imageData[xCoord*4 + yCoord*imageWidth*4 + 2];
+    
+    delete[] imageData;
+    
+    std::vector<int> color{r, g, b, 255};
+    return color;
+}
+
+void swapColors(ImVec4& colorToChange, ImVec4& colorToChangeTo, int imageWidth, int imageHeight){
+    int pixelDataLen = imageWidth*imageHeight*4;
+    unsigned char* imageData = new unsigned char[pixelDataLen];
+    
+    glActiveTexture(IMAGE_DISPLAY);
+    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, imageData);
+    
+    for(int row = 0; row < imageHeight; row++){
+        for(int col = 0; col < imageWidth; col++){
+            float r = imageData[col*4 + row*imageWidth*4] / 255.0;
+            float g = imageData[col*4 + row*imageWidth*4 + 1] / 255.0;
+            float b = imageData[col*4 + row*imageWidth*4 + 2] / 255.0;
+            
+            if(r == colorToChange.x && g == colorToChange.y && b == colorToChange.z){
+                imageData[col*4 + row*imageWidth*4] = (unsigned char)(colorToChangeTo.x * 255);
+                imageData[col*4 + row*imageWidth*4 + 1] = (unsigned char)(colorToChangeTo.y * 255);
+                imageData[col*4 + row*imageWidth*4 + 2] = (unsigned char)(colorToChangeTo.z * 255);
+            }
+        }
+    }
+    
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, imageData);
+    
+    delete[] imageData;
+}
+
+
 void showImageEditor(SDL_Window* window){
     static FilterParameters filterParams;
     static GLuint texture;
@@ -270,10 +323,11 @@ void showImageEditor(SDL_Window* window){
     static int imageChannels = 4; //rgba
     static char importImageFilepath[FILEPATH_MAX_LENGTH] = "test_image.png";
     static char exportImageName[FILEPATH_MAX_LENGTH] = "";
+static std::vector<int> selectedPixelColor{0, 0, 0, 255};
     
     // for filters that have customizable parameters,
     // have a bool flag so we can toggle the params for a specific filter
-    static std::map<Filter, bool> filtersWithParams {
+    static std::map<Filter, bool> filtersWithParams{
         {Filter::Saturation, false},
         {Filter::Outline, false},
         {Filter::Mosaic, false},
@@ -335,9 +389,68 @@ void showImageEditor(SDL_Window* window){
         
         ImGui::Text("size = %d x %d", imageWidth, imageHeight);
         
+        // https://github.com/ocornut/imgui/issues/3404 - mouse interaction
+        const ImVec2 origin = ImGui::GetCursorScreenPos(); // Lock scrolled origin
+        
+        // show the image
         ImGui::Image((void *)(intptr_t)texture, ImVec2(imageWidth, imageHeight));
-        //ImGui::Text("image imported");
-     
+        
+        // handle clicking on the image
+        ImGuiIO& io = ImGui::GetIO();
+        
+        // Hovered - this is so we ensure that we take into account only mouse interactions that occur
+        // on this particular canvas. otherwise it could pick up mouse clicks that occur on other windows as well.
+        const bool isHovered = ImGui::IsItemHovered();        
+        const ImVec2 mousePosInImage(io.MousePos.x - origin.x, io.MousePos.y - origin.y);
+
+        if(isHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)){
+            //ImGui::Text("%d, %d", (int)mousePosInImage.x, (int)mousePosInImage.y);
+            selectedPixelColor = extractPixelColor((int)mousePosInImage.x, (int)mousePosInImage.y, imageWidth, imageHeight);
+        }
+        
+        int r = selectedPixelColor[0];
+        int g = selectedPixelColor[1];
+        int b = selectedPixelColor[2];
+        
+        // show selected pixel color
+        // something to try? https://github.com/ocornut/imgui/issues/1566
+        // change text color: https://stackoverflow.com/questions/61853584/how-can-i-change-text-color-of-my-inputtext-in-imgui
+        ImVec2 canvasPos0 = ImVec2(0, origin.y+imageHeight+5); 
+        ImVec2 canvasPos1 = ImVec2(250, origin.y+imageHeight+20);
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        drawList->AddRectFilled(canvasPos0, canvasPos1, IM_COL32(r, g, b, 255));
+        
+        if(r > 190 || g > 190 || b > 190){
+            // for light colors, set text color to black
+            ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(0, 0, 0, 255));
+        }
+        
+        ImGui::Text(colorText(r, g, b).c_str());
+        
+        if(r > 190 || g > 190 || b > 190){
+            ImGui::PopStyleColor();
+        }
+        
+        // spacer
+        ImGui::Dummy(ImVec2(0.0f, 3.0f));
+        
+        // be able to swap colors
+        // colorpicker help - https://github.com/ocornut/imgui/issues/3583
+        static ImVec4 colorToChange;
+        static ImVec4 colorToChangeTo;
+        
+        ImGui::ColorEdit4(":color to change", (float*)&colorToChange, ImGuiColorEditFlags_NoInputs);
+        ImGui::SameLine();
+        ImGui::ColorEdit4(":color to change to", (float*)&colorToChangeTo, ImGuiColorEditFlags_NoInputs);
+        ImGui::SameLine();
+        if(ImGui::Button("swap colors")){
+            swapColors(colorToChange, colorToChangeTo, imageWidth, imageHeight);
+        }
+        
+        // spacer
+        ImGui::Dummy(ImVec2(0.0f, 3.0f));
+        
+        // show filter options
         // GRAYSCALE
         if(ImGui::Button("grayscale")){
             doFilter(imageWidth, imageHeight, Filter::Grayscale, filterParams);
