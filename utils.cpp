@@ -6,11 +6,6 @@
 #include <vector>
 #include <iostream>
 
-#if WINDOWS_BUILD
-#include <windows.h>
-#include <commctrl.h>
-#endif
-
 #include "stb_image.h"
 #include "stb_image_write.h"
 
@@ -348,7 +343,7 @@ void showImageEditor(SDL_Window* window){
         ofn.lStructSize = sizeof(ofn);
         ofn.lpstrFile = importImageFilepath;
         ofn.nMaxFile = sizeof(importImageFilepath);
-        ofn.lpstrFilter = "Image Files\0*.bmp;*.png;*.jpg;*.jpeg\0\0";
+        ofn.lpstrFilter = "Image Files\0*.bmp;*.png;*.jpg;*.jpeg;*.gif\0\0";
         ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
 
         GetOpenFileName(&ofn);
@@ -359,6 +354,13 @@ void showImageEditor(SDL_Window* window){
         std::string filepath(importImageFilepath);
         
         if(trimString(filepath) != ""){
+            
+            std::cout << "file extension: " << filepath.substr(filepath.size()-3) << '\n';
+            
+            // TODO:
+            // if gif, use GIFLIB to get each frame so the user can go through the frames
+            // allow batch editing of frames?
+            
             bool loaded = importImage(
                 filepath.c_str(), 
                 &texture, 

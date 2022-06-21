@@ -112,6 +112,10 @@ int main(int, char**)
     // initialize random seed
     srand(time(NULL));
     
+    // for debugging w/ Win32
+    AllocConsole();
+    freopen("CON", "w", stdout);
+    
     // Main loop
     bool done = false;
     while(!done){

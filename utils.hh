@@ -8,6 +8,11 @@
 #include <string>
 #include <GL/glew.h>
 
+#if WINDOWS_BUILD
+#include <windows.h>
+#include <commctrl.h>
+#endif
+
 std::string trimString(std::string& str);
 std::string colorText(int r, int g, int b);
 
