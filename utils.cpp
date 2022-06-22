@@ -6,6 +6,8 @@
 #include <vector>
 #include <iostream>
 
+#include "external/giflib/gif_lib.h"
+
 #include "stb_image.h"
 #include "stb_image_write.h"
 
@@ -308,9 +310,12 @@ void swapColors(ImVec4& colorToChange, ImVec4& colorToChangeTo, int imageWidth, 
 
 void showImageEditor(SDL_Window* window){
     static FilterParameters filterParams;
+    static GifFileType* gifImage = NULL; // TODO: make a smart pointer wrapper around this?
     static GLuint texture;
     static GLuint originalImage;
     static bool showImage = false;
+    static bool isGif = false;
+    static int currGifFrameIndex = 0;
     static int imageHeight = 0;
     static int imageWidth = 0;
     static int originalImageHeight = 0;
@@ -354,12 +359,45 @@ void showImageEditor(SDL_Window* window){
         std::string filepath(importImageFilepath);
         
         if(trimString(filepath) != ""){
-            
-            std::cout << "file extension: " << filepath.substr(filepath.size()-3) << '\n';
-            
             // TODO:
             // if gif, use GIFLIB to get each frame so the user can go through the frames
             // allow batch editing of frames?
+            if(filepath.substr(filepath.size()-3) == "gif"){
+                std::cout << "you are a gif\n";
+                
+                if(gifImage != NULL){
+                    // delete previous gif
+                    // TODO: need to ensure proper deallocation when program quits if there is a gif
+                    delete gifImage;
+                    gifImage = NULL;
+                }
+                
+                int error;
+                std::cout << "creating a new GifFileType\n";
+                gifImage = DGifOpenFileName(filepath.c_str(), &error);
+                
+                if(gifImage == NULL){
+                    // error occurred. check error*
+                    std::cout << "oh no, an error occurred.\n";
+                }
+                
+                // get the gif data
+                int getData = DGifSlurp(gifImage);
+                if(getData == GIF_ERROR){
+                    // error occurred
+                    std::cout << "oh no, an error occurred with getting gif data.\n";
+                }
+                
+                std::cout << "num gif frames: " << gifImage->ImageCount << '\n';
+                
+                isGif = true;
+                
+                // now we can access the frames of the gif via gifImage->SavedImages
+                // image data for each SavedImage is in the GifByteType *RasterBits member
+                // GifByteType is an unsigned char
+            }else{
+                isGif = false;
+            }
             
             bool loaded = importImage(
                 filepath.c_str(), 
@@ -399,6 +437,10 @@ void showImageEditor(SDL_Window* window){
         
         // handle clicking on the image
         ImGuiIO& io = ImGui::GetIO();
+        
+        // TODO: if a gif image, allow traversing the frames with the keyboard left/right arrow buttons
+        if(isGif){
+        }
         
         // Hovered - this is so we ensure that we take into account only mouse interactions that occur
         // on this particular canvas. otherwise it could pick up mouse clicks that occur on other windows as well.
