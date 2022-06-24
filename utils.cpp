@@ -308,6 +308,56 @@ void swapColors(ImVec4& colorToChange, ImVec4& colorToChangeTo, int imageWidth, 
 }
 
 
+void displayGifFrame(int gifFrameIndex, GifFileType* gifImage){
+    // https://stackoverflow.com/questions/56651645/how-do-i-get-the-rgb-colour-data-from-a-giflib-savedimage-structure
+    // https://gist.github.com/suzumura-ss/a5e922994513e44226d33c3a0c2c60d1
+    // https://stackoverflow.com/questions/26958369/apply-patch-between-gif-frames
+    
+    /* TODO
+        - make sure any edits to frames get saved somewhere? maybe this code should
+          run for each frame after loading in a new gif image and we can store them
+          somewhere. the 'next' and 'prev' frame buttons can then access the stored images
+          instead of running this code for each button press
+          
+        - have to figure out what to do with pixels that haven't changed from the previous frame.
+          they show up as black pixels.
+    */
+    
+    SavedImage currFrame = gifImage->SavedImages[gifFrameIndex];
+    GifImageDesc imageDesc = currFrame.ImageDesc;
+    ColorMapObject* colorMap = imageDesc.ColorMap ? imageDesc.ColorMap : gifImage->SColorMap;
+    int frameWidth = imageDesc.Width;
+    int frameHeight = imageDesc.Height;
+    int pixelDataLen = frameWidth*frameHeight*4;
+    unsigned char* imageData = new unsigned char[pixelDataLen];
+    GifByteType* nextFrameData = currFrame.RasterBits;
+    
+    //std::cout << "image width: " << frameWidth << '\n';
+    //std::cout << "image height: " << frameHeight << '\n';
+    
+    int imageDataIndex = 0;
+    for(int row = 0; row < frameHeight; row++){
+        for(int col = 0; col < frameWidth; col++){
+            int pixelDataIndex = nextFrameData[row * frameWidth + col];
+            if(colorMap){
+                GifColorType rgb = colorMap->Colors[pixelDataIndex];
+                imageData[imageDataIndex++] = rgb.Red;
+                imageData[imageDataIndex++] = rgb.Green;
+                imageData[imageDataIndex++] = rgb.Blue;
+                imageData[imageDataIndex++] = 255;
+            }
+        }
+    }
+    
+    // TODO: update temp display too
+    // TODO: also have to keep in mind the current rotation
+    glActiveTexture(IMAGE_DISPLAY);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, frameWidth, frameHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, imageData);
+    
+    delete imageData;
+}
+
+
 void showImageEditor(SDL_Window* window){
     static FilterParameters filterParams;
     static GifFileType* gifImage = NULL; // TODO: make a smart pointer wrapper around this?
@@ -438,10 +488,6 @@ void showImageEditor(SDL_Window* window){
         // handle clicking on the image
         ImGuiIO& io = ImGui::GetIO();
         
-        // TODO: if a gif image, allow traversing the frames with the keyboard left/right arrow buttons
-        if(isGif){
-        }
-        
         // Hovered - this is so we ensure that we take into account only mouse interactions that occur
         // on this particular canvas. otherwise it could pick up mouse clicks that occur on other windows as well.
         const bool isHovered = ImGui::IsItemHovered();        
@@ -449,20 +495,23 @@ void showImageEditor(SDL_Window* window){
 
         if(isHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)){
             //ImGui::Text("%d, %d", (int)mousePosInImage.x, (int)mousePosInImage.y);
-            selectedPixelColor = extractPixelColor((int)mousePosInImage.x, (int)mousePosInImage.y, imageWidth, imageHeight);
+            if((int)mousePosInImage.y < imageHeight && (int)mousePosInImage.x < imageWidth){
+                // ensure coords are within image range
+                selectedPixelColor = extractPixelColor((int)mousePosInImage.x, (int)mousePosInImage.y, imageWidth, imageHeight);
+            }
         }
         
         int r = selectedPixelColor[0];
         int g = selectedPixelColor[1];
         int b = selectedPixelColor[2];
         
-        // show selected pixel color
+        /* show selected pixel color
         // something to try? https://github.com/ocornut/imgui/issues/1566
         // change text color: https://stackoverflow.com/questions/61853584/how-can-i-change-text-color-of-my-inputtext-in-imgui
-        ImVec2 canvasPos0 = ImVec2(0, origin.y+imageHeight+5); 
-        ImVec2 canvasPos1 = ImVec2(250, origin.y+imageHeight+20);
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
-        drawList->AddRectFilled(canvasPos0, canvasPos1, IM_COL32(r, g, b, 255));
+        //ImVec2 canvasPos0 = ImVec2(origin.x+imageWidth+5, origin.y+imageHeight-15); 
+        //ImVec2 canvasPos1 = ImVec2(origin.x+imageWidth+200, origin.y+imageHeight);
+        //ImDrawList* drawList = ImGui::GetWindowDrawList();
+        //drawList->AddRectFilled(canvasPos0, canvasPos1, IM_COL32(r, g, b, 255));
         
         if(r > 190 || g > 190 || b > 190){
             // for light colors, set text color to black
@@ -474,9 +523,35 @@ void showImageEditor(SDL_Window* window){
         if(r > 190 || g > 190 || b > 190){
             ImGui::PopStyleColor();
         }
+        */
+        
+        // https://github.com/ocornut/imgui/issues/950        
+        char input[30];
+        strcpy(input, colorText(r, g, b).c_str());
+        ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(r, g, b, 255));
+        ImGui::InputText("", input, 30, ImGuiInputTextFlags_ReadOnly);
+        ImGui::PopStyleColor();
         
         // spacer
         ImGui::Dummy(ImVec2(0.0f, 3.0f));
+        
+        // TODO: if a gif image, allow traversing the frames with the keyboard left/right arrow buttons
+        if(isGif){
+            // https://github.com/ocornut/imgui/issues/37 ? how to work with SDL2 key input?
+            if(ImGui::Button("prev frame")){
+                if(currGifFrameIndex > 0){
+                    currGifFrameIndex--;
+                }
+                displayGifFrame(currGifFrameIndex, gifImage);
+            }
+            ImGui::SameLine();
+            if(ImGui::Button("next frame")){
+                if(currGifFrameIndex < gifImage->ImageCount-1){
+                    currGifFrameIndex++;
+                }
+                displayGifFrame(currGifFrameIndex, gifImage);
+            }
+        }
         
         // be able to swap colors
         // colorpicker help - https://github.com/ocornut/imgui/issues/3583

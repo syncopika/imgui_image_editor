@@ -75,6 +75,9 @@ int main(int, char**)
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     //io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
     //io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+    
+    //io.KeyMap[ImGuiKey_LeftArrow] = ImGuiKey_LeftArrow;
+    //io.KeyMap[ImGuiKey_RightArrow] = ImGuiKey_RightArrow;
 
     // Setup Dear ImGui style
     ImGui::StyleColorsDark();
