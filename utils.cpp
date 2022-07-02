@@ -1,15 +1,15 @@
 #include "utils.hh"
 
-#include <map>
-#include <string>
-#include <sstream>
-#include <vector>
+#include <algorithm>
+#include <cassert>
 #include <iostream>
+#include <map>
+#include <sstream>
+#include <string>
+#include <vector>
 
-#if WINDOWS_BUILD
-#include <windows.h>
-#include <commctrl.h>
-#endif
+#include "external/giflib/gif_lib.h"
+#include "external/gif.h"
 
 #include "stb_image.h"
 #include "stb_image_write.h"
@@ -139,6 +139,7 @@ void rotateImage(int& imageWidth, int& imageHeight){
     imageHeight = temp;
     
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+    
     glActiveTexture(TEMP_IMAGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
     
@@ -153,6 +154,7 @@ void updateTempImageState(int imageWidth, int imageHeight){
         
     glActiveTexture(IMAGE_DISPLAY);
     glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData); // uses currently bound texture from importImage()
+    
     glActiveTexture(TEMP_IMAGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
     
@@ -170,7 +172,8 @@ void resetImageState(int& imageWidth, int& imageHeight, int originalWidth, int o
     
     // update temp image and display image
     glActiveTexture(IMAGE_DISPLAY);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);    
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+    
     glActiveTexture(TEMP_IMAGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
     
@@ -182,9 +185,8 @@ void setFilter(Filter filter, std::map<Filter, bool>& filtersWithParams, int ima
     updateTempImageState(imageWidth, imageHeight);
 }
 
-void doFilter(int imageWidth, int imageHeight, Filter filter, FilterParameters& filterParams){
-    // allocate memory for the image 
-    int pixelDataLen = imageWidth*imageHeight*4; // 4 because rgba
+void doFilter(int imageWidth, int imageHeight, Filter filter, FilterParameters& filterParams, bool isGif, ReconstructedGifFrames& gifFrames){
+    int pixelDataLen = imageWidth * imageHeight * 4; // 4 because rgba
     unsigned char* pixelData = new unsigned char[pixelDataLen];
             
     // do the thing
@@ -264,7 +266,12 @@ void doFilter(int imageWidth, int imageHeight, Filter filter, FilterParameters& 
             break;
     }
     
-    // reclaim memory
+    if(isGif){
+        // update reconstructedGifFrames
+        //std::cout << "updating frame " << gifFrames.currFrameIndex << "\n";
+        std::copy(pixelData, pixelData + pixelDataLen, gifFrames.frames[gifFrames.currFrameIndex]);
+    }
+    
     delete[] pixelData;
 }
 
@@ -310,12 +317,95 @@ void swapColors(ImVec4& colorToChange, ImVec4& colorToChangeTo, int imageWidth, 
     delete[] imageData;
 }
 
+void reconstructGifFrames(ReconstructedGifFrames& gifFrames, GifFileType* gifImage){
+    // clear out old frames
+    if(!gifFrames.frames.empty()){
+        for(unsigned char* frame : gifFrames.frames){
+            delete frame;
+        }
+        gifFrames.frames.erase(gifFrames.frames.begin(), gifFrames.frames.end());
+    }
+    
+    assert(gifFrames.frames.empty());
+    
+    int numFrames = gifImage->ImageCount;
+    
+    for(int i = 0; i < numFrames; i++){
+        SavedImage frame = gifImage->SavedImages[i];
+        GifImageDesc imageDesc = frame.ImageDesc;
+        ColorMapObject* colorMap = imageDesc.ColorMap ? imageDesc.ColorMap : gifImage->SColorMap;
+    
+        int frameWidth = imageDesc.Width;
+        int frameHeight = imageDesc.Height;
+        int pixelDataLen = frameWidth * frameHeight * 4;
+    
+        unsigned char* frameData = new unsigned char[pixelDataLen];
+        
+        // copy over previous frame 
+        if(i > 0) std::copy(gifFrames.frames[i-1], gifFrames.frames[i-1]+pixelDataLen, frameData);
+        
+        // then update any pixels as needed
+        int imageDataIndex = 0;
+        for(int row = 0; row < frameHeight; row++){
+            for(int col = 0; col < frameWidth; col++){
+                int pixelDataIndex = frame.RasterBits[row * frameWidth + col];
+                if(pixelDataIndex != gifImage->SBackGroundColor){
+                    GifColorType rgb = colorMap->Colors[pixelDataIndex];
+                    frameData[imageDataIndex++] = rgb.Red;
+                    frameData[imageDataIndex++] = rgb.Green;
+                    frameData[imageDataIndex++] = rgb.Blue;
+                    frameData[imageDataIndex++] = 255;
+                }else{
+                    // skip this pixel
+                    imageDataIndex += 4;
+                }
+            }
+        }
+        
+        gifFrames.frames.push_back(frameData);
+    }
+}
+
+
+void displayGifFrame(GifFileType* gifImage, ReconstructedGifFrames& gifFrames){
+    // https://stackoverflow.com/questions/56651645/how-do-i-get-the-rgb-colour-data-from-a-giflib-savedimage-structure
+    // https://gist.github.com/suzumura-ss/a5e922994513e44226d33c3a0c2c60d1
+    // https://stackoverflow.com/questions/26958369/apply-patch-between-gif-frames
+    // https://commandlinefanatic.com/cgi-bin/showarticle.cgi?article=art011
+    // http://giflib.sourceforge.net/whatsinagif/bits_and_bytes.html
+    
+    /* TODO
+        - make sure any edits to frames get saved somewhere? maybe this code should
+          run for each frame after loading in a new gif image and we can store them
+          somewhere. the 'next' and 'prev' frame buttons can then access the stored images
+          instead of running this code for each button press
+    */
+    
+    SavedImage currFrame = gifImage->SavedImages[gifFrames.currFrameIndex];
+    GifImageDesc imageDesc = currFrame.ImageDesc;
+    int frameWidth = imageDesc.Width;
+    int frameHeight = imageDesc.Height;
+    
+    // use reconstructedGifFrames struct to get the frame
+    //std::cout << "displaying frame " << gifFrames.currFrameIndex << "\n";
+    unsigned char* imageData = gifFrames.frames[gifFrames.currFrameIndex];
+    
+    glActiveTexture(IMAGE_DISPLAY);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, frameWidth, frameHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, imageData);
+    
+    glActiveTexture(TEMP_IMAGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, frameWidth, frameHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, imageData);
+}
+
 
 void showImageEditor(SDL_Window* window){
     static FilterParameters filterParams;
+    static GifFileType* gifImage = NULL; // TODO: make a smart pointer wrapper around this? need to delete at some point
+    static ReconstructedGifFrames gifFrames;
     static GLuint texture;
     static GLuint originalImage;
     static bool showImage = false;
+    static bool isGif = false;
     static int imageHeight = 0;
     static int imageWidth = 0;
     static int originalImageHeight = 0;
@@ -348,7 +438,7 @@ void showImageEditor(SDL_Window* window){
         ofn.lStructSize = sizeof(ofn);
         ofn.lpstrFile = importImageFilepath;
         ofn.nMaxFile = sizeof(importImageFilepath);
-        ofn.lpstrFilter = "Image Files\0*.bmp;*.png;*.jpg;*.jpeg\0\0";
+        ofn.lpstrFilter = "Image Files\0*.bmp;*.png;*.jpg;*.jpeg;*.gif\0\0";
         ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
 
         GetOpenFileName(&ofn);
@@ -359,6 +449,43 @@ void showImageEditor(SDL_Window* window){
         std::string filepath(importImageFilepath);
         
         if(trimString(filepath) != ""){
+            // TODO: allow batch editing of frames?
+            if(filepath.substr(filepath.size()-3) == "gif"){
+                //std::cout << "you are a gif\n";
+                
+                if(gifImage != NULL){
+                    // delete previous gif
+                    // TODO: need to ensure proper deallocation when program quits if there is a gif
+                    delete gifImage;
+                    gifImage = NULL;
+                }
+                
+                int error;
+                std::cout << "creating a new GifFileType\n";
+                gifImage = DGifOpenFileName(filepath.c_str(), &error);
+                
+                if(gifImage == NULL){
+                    // error occurred. check error*
+                    std::cout << "oh no, an error occurred.\n";
+                }else{
+                    // get the gif data
+                    int getData = DGifSlurp(gifImage);
+                    if(getData == GIF_ERROR){
+                        // error occurred
+                        std::cout << "oh no, an error occurred with getting gif data.\n";
+                    }
+                    
+                    //std::cout << "num gif frames: " << gifImage->ImageCount << '\n';
+                    
+                    isGif = true;
+                    
+                    reconstructGifFrames(gifFrames, gifImage);
+                    gifFrames.currFrameIndex = 0;
+                }
+            }else{
+                isGif = false;
+            }
+            
             bool loaded = importImage(
                 filepath.c_str(), 
                 &texture, 
@@ -383,7 +510,7 @@ void showImageEditor(SDL_Window* window){
     }
     
     if(showImage){
-        if(ImGui::Button("rotate image")){
+        if(!isGif && ImGui::Button("rotate image")){
             rotateImage(imageWidth, imageHeight);
         }
         
@@ -405,20 +532,23 @@ void showImageEditor(SDL_Window* window){
 
         if(isHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)){
             //ImGui::Text("%d, %d", (int)mousePosInImage.x, (int)mousePosInImage.y);
-            selectedPixelColor = extractPixelColor((int)mousePosInImage.x, (int)mousePosInImage.y, imageWidth, imageHeight);
+            if((int)mousePosInImage.y < imageHeight && (int)mousePosInImage.x < imageWidth){
+                // ensure coords are within image range
+                selectedPixelColor = extractPixelColor((int)mousePosInImage.x, (int)mousePosInImage.y, imageWidth, imageHeight);
+            }
         }
         
         int r = selectedPixelColor[0];
         int g = selectedPixelColor[1];
         int b = selectedPixelColor[2];
         
-        // show selected pixel color
+        /* show selected pixel color
         // something to try? https://github.com/ocornut/imgui/issues/1566
         // change text color: https://stackoverflow.com/questions/61853584/how-can-i-change-text-color-of-my-inputtext-in-imgui
-        ImVec2 canvasPos0 = ImVec2(0, origin.y+imageHeight+5); 
-        ImVec2 canvasPos1 = ImVec2(250, origin.y+imageHeight+20);
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
-        drawList->AddRectFilled(canvasPos0, canvasPos1, IM_COL32(r, g, b, 255));
+        //ImVec2 canvasPos0 = ImVec2(origin.x+imageWidth+5, origin.y+imageHeight-15); 
+        //ImVec2 canvasPos1 = ImVec2(origin.x+imageWidth+200, origin.y+imageHeight);
+        //ImDrawList* drawList = ImGui::GetWindowDrawList();
+        //drawList->AddRectFilled(canvasPos0, canvasPos1, IM_COL32(r, g, b, 255));
         
         if(r > 190 || g > 190 || b > 190){
             // for light colors, set text color to black
@@ -430,9 +560,37 @@ void showImageEditor(SDL_Window* window){
         if(r > 190 || g > 190 || b > 190){
             ImGui::PopStyleColor();
         }
+        */
+        
+        // https://github.com/ocornut/imgui/issues/950
+        char input[30];
+        strcpy(input, colorText(r, g, b).c_str());
+        ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(r, g, b, 255));
+        ImGui::InputText("", input, 30, ImGuiInputTextFlags_ReadOnly);
+        ImGui::PopStyleColor();
         
         // spacer
         ImGui::Dummy(ImVec2(0.0f, 3.0f));
+        
+        // TODO: if a gif image, allow traversing the frames with the keyboard left/right arrow buttons
+        if(isGif){
+            // https://github.com/ocornut/imgui/issues/37 ? how to work with SDL2 key input?
+            if(ImGui::Button("prev frame")){
+                if(gifFrames.currFrameIndex > 0){
+                    gifFrames.currFrameIndex--;
+                }
+                displayGifFrame(gifImage, gifFrames);
+            }
+            ImGui::SameLine();
+            if(ImGui::Button("next frame")){
+                if(gifFrames.currFrameIndex < gifImage->ImageCount-1){
+                    gifFrames.currFrameIndex++;
+                }
+                displayGifFrame(gifImage, gifFrames);
+            }
+            ImGui::SameLine();
+            ImGui::Text((std::string("curr frame: ") + std::to_string(gifFrames.currFrameIndex)).c_str());
+        }
         
         // be able to swap colors
         // colorpicker help - https://github.com/ocornut/imgui/issues/3583
@@ -453,13 +611,13 @@ void showImageEditor(SDL_Window* window){
         // show filter options
         // GRAYSCALE
         if(ImGui::Button("grayscale")){
-            doFilter(imageWidth, imageHeight, Filter::Grayscale, filterParams);
+            doFilter(imageWidth, imageHeight, Filter::Grayscale, filterParams, isGif, gifFrames);
         }
         ImGui::SameLine();
         
         // INVERT
         if(ImGui::Button("invert")){
-            doFilter(imageWidth, imageHeight, Filter::Invert, filterParams);
+            doFilter(imageWidth, imageHeight, Filter::Invert, filterParams, isGif, gifFrames);
         }
         ImGui::SameLine();
         
@@ -518,28 +676,28 @@ void showImageEditor(SDL_Window* window){
             
             // if any of the saturation parameters change, re-run the filter
             if(d1 || d2 || d3 || d4){
-                doFilter(imageWidth, imageHeight, Filter::Saturation, filterParams);
+                doFilter(imageWidth, imageHeight, Filter::Saturation, filterParams, isGif, gifFrames);
             }
         }
         
         if(filtersWithParams[Filter::Outline]){
             ImGui::Text("outline filter parameters");
             if(ImGui::SliderInt("color difference limit", &filterParams.outlineLimit, 1, 20)){
-                doFilter(imageWidth, imageHeight, Filter::Outline, filterParams);
+                doFilter(imageWidth, imageHeight, Filter::Outline, filterParams, isGif, gifFrames);
             }
         }
         
         if(filtersWithParams[Filter::Mosaic]){
             ImGui::Text("mosaic filter parameters");
             if(ImGui::SliderInt("mosaic chunk size", &filterParams.chunkSize, 1, 20)){
-                doFilter(imageWidth, imageHeight, Filter::Mosaic, filterParams);
+                doFilter(imageWidth, imageHeight, Filter::Mosaic, filterParams, isGif, gifFrames);
             }
         }
         
         if(filtersWithParams[Filter::ChannelOffset]){
             ImGui::Text("channel offset parameters");
             if(ImGui::SliderInt("chan offset", &filterParams.chanOffset, 1, 15)){ // TODO: find out why using "channel offset" for the label produces an assertion error :0
-                doFilter(imageWidth, imageHeight, Filter::ChannelOffset, filterParams);
+                doFilter(imageWidth, imageHeight, Filter::ChannelOffset, filterParams, isGif, gifFrames);
             }
         }
         
@@ -551,14 +709,14 @@ void showImageEditor(SDL_Window* window){
             bool d3 = ImGui::SliderFloat("intensity", &filterParams.intensity, 0.0f, 1.0f);
 
             if(d1 || d2 || d3){
-                doFilter(imageWidth, imageHeight, Filter::Crt, filterParams);
+                doFilter(imageWidth, imageHeight, Filter::Crt, filterParams, isGif, gifFrames);
             }
         }
         
         if(filtersWithParams[Filter::Voronoi]){
             ImGui::Text("voronoi filter parameters");
             if(ImGui::SliderInt("neighbor count", &filterParams.voronoiNeighborCount, 10, 60)){
-                doFilter(imageWidth, imageHeight, Filter::Voronoi, filterParams);
+                doFilter(imageWidth, imageHeight, Filter::Voronoi, filterParams, isGif, gifFrames);
             }
         }
         
@@ -572,6 +730,7 @@ void showImageEditor(SDL_Window* window){
         ImGui::InputText("image name", exportImageName, 64); // TODO: is this long enough?
         
         std::string exportName(exportImageName);
+        
         if(exportImageClicked){
             glActiveTexture(IMAGE_DISPLAY);
             
@@ -590,6 +749,48 @@ void showImageEditor(SDL_Window* window){
             delete[] pixelData;
             
             ImGui::OpenPopup("message"); // show popup
+        }
+        
+        if(isGif){
+            bool exportGifClicked = ImGui::Button("export as gif");
+            ImGui::SameLine();
+            
+            if(exportGifClicked){
+                // need to use reconstructedGifFrames struct to write frames' image data to gif
+                GifWriter gifWriter;
+                
+                // need width, height of first frame (assuming uniform dimensions for frames)
+                int width = gifImage->SavedImages[0].ImageDesc.Width;
+                int height = gifImage->SavedImages[0].ImageDesc.Height;
+                
+                // TODO: what to do for delay between frames? that info should be in GifFileType*?
+                
+                int delay = 150; // in milliseconds
+                
+                std::string gifName = exportName + ".gif";
+                GifBegin(&gifWriter, gifName.c_str(), (uint32_t)width, (uint32_t)height, (uint32_t)delay/10); // get delay from gifImage?
+                
+                for(unsigned char* frame : gifFrames.frames){
+                    GifRGBA* pixelArr = new GifRGBA[sizeof(GifRGBA)*width*height];
+                    
+                    int pixelArrIdx = 0;
+                    for(int i = 0; i < (width * height * 4) - 4; i += 4){
+                        pixelArr[pixelArrIdx].r = frame[i];
+                        pixelArr[pixelArrIdx].g = frame[i+1];
+                        pixelArr[pixelArrIdx].b = frame[i+2];
+                        pixelArr[pixelArrIdx].a = frame[i+3];
+                        pixelArrIdx++;
+                    }
+                    
+                    GifWriteFrame(&gifWriter, pixelArr, (uint32_t)width, (uint32_t)height, (uint32_t)delay/10);
+                    
+                    delete[] pixelArr;
+                }
+                
+                GifEnd(&gifWriter);
+                
+                ImGui::OpenPopup("message"); // show popup
+            }            
         }
         
         // signal that the image export happened in popup
