@@ -1,10 +1,12 @@
 #include "utils.hh"
 
-#include <map>
-#include <string>
-#include <sstream>
-#include <vector>
+#include <algorithm>
+#include <cassert>
 #include <iostream>
+#include <map>
+#include <sstream>
+#include <string>
+#include <vector>
 
 #include "external/giflib/gif_lib.h"
 
@@ -307,60 +309,91 @@ void swapColors(ImVec4& colorToChange, ImVec4& colorToChangeTo, int imageWidth, 
     delete[] imageData;
 }
 
+void reconstructGifFrames(ReconstructedGifFrames& gifFrames, GifFileType* gifImage){
+    // clear out old frames
+    if(!gifFrames.frames.empty()){
+        for(unsigned char* frame : gifFrames.frames){
+            delete frame;
+        }
+        gifFrames.frames.erase(gifFrames.frames.begin(), gifFrames.frames.end());
+    }
+    
+    assert(gifFrames.frames.empty());
+    
+    int numFrames = gifImage->ImageCount;
+    
+    for(int i = 0; i < numFrames; i++){
+        SavedImage frame = gifImage->SavedImages[i];
+        GifImageDesc imageDesc = frame.ImageDesc;
+        ColorMapObject* colorMap = imageDesc.ColorMap ? imageDesc.ColorMap : gifImage->SColorMap;
+    
+        int frameWidth = imageDesc.Width;
+        int frameHeight = imageDesc.Height;
+        int pixelDataLen = frameWidth * frameHeight * 4;
+    
+        unsigned char* frameData = new unsigned char[pixelDataLen];
+        
+        // copy over previous frame 
+        if(i > 0) std::copy(gifFrames.frames[i-1], gifFrames.frames[i-1]+pixelDataLen, frameData);
+        
+        // then update any pixels as needed
+        int imageDataIndex = 0;
+        for(int row = 0; row < frameHeight; row++){
+            for(int col = 0; col < frameWidth; col++){
+                int pixelDataIndex = frame.RasterBits[row * frameWidth + col];
+                if(pixelDataIndex != gifImage->SBackGroundColor){
+                    GifColorType rgb = colorMap->Colors[pixelDataIndex];
+                    frameData[imageDataIndex++] = rgb.Red;
+                    frameData[imageDataIndex++] = rgb.Green;
+                    frameData[imageDataIndex++] = rgb.Blue;
+                    frameData[imageDataIndex++] = 255;
+                }else{
+                    // skip this pixel
+                    imageDataIndex += 4;
+                }
+            }
+        }
+        
+        gifFrames.frames.push_back(frameData);
+    }
+}
 
-void displayGifFrame(int gifFrameIndex, GifFileType* gifImage){
+
+void displayGifFrame(int gifFrameIndex, GifFileType* gifImage, ReconstructedGifFrames& gifFrames){
     // https://stackoverflow.com/questions/56651645/how-do-i-get-the-rgb-colour-data-from-a-giflib-savedimage-structure
     // https://gist.github.com/suzumura-ss/a5e922994513e44226d33c3a0c2c60d1
     // https://stackoverflow.com/questions/26958369/apply-patch-between-gif-frames
+    // https://commandlinefanatic.com/cgi-bin/showarticle.cgi?article=art011
+    // http://giflib.sourceforge.net/whatsinagif/bits_and_bytes.html
     
     /* TODO
         - make sure any edits to frames get saved somewhere? maybe this code should
           run for each frame after loading in a new gif image and we can store them
           somewhere. the 'next' and 'prev' frame buttons can then access the stored images
           instead of running this code for each button press
-          
-        - have to figure out what to do with pixels that haven't changed from the previous frame.
-          they show up as black pixels.
     */
     
     SavedImage currFrame = gifImage->SavedImages[gifFrameIndex];
     GifImageDesc imageDesc = currFrame.ImageDesc;
-    ColorMapObject* colorMap = imageDesc.ColorMap ? imageDesc.ColorMap : gifImage->SColorMap;
     int frameWidth = imageDesc.Width;
     int frameHeight = imageDesc.Height;
-    int pixelDataLen = frameWidth*frameHeight*4;
-    unsigned char* imageData = new unsigned char[pixelDataLen];
-    GifByteType* nextFrameData = currFrame.RasterBits;
     
-    //std::cout << "image width: " << frameWidth << '\n';
-    //std::cout << "image height: " << frameHeight << '\n';
-    
-    int imageDataIndex = 0;
-    for(int row = 0; row < frameHeight; row++){
-        for(int col = 0; col < frameWidth; col++){
-            int pixelDataIndex = nextFrameData[row * frameWidth + col];
-            if(colorMap){
-                GifColorType rgb = colorMap->Colors[pixelDataIndex];
-                imageData[imageDataIndex++] = rgb.Red;
-                imageData[imageDataIndex++] = rgb.Green;
-                imageData[imageDataIndex++] = rgb.Blue;
-                imageData[imageDataIndex++] = 255;
-            }
-        }
-    }
+    // use reconstructedGifFrames struct to get the frame
+    unsigned char* imageData = gifFrames.frames[gifFrameIndex];
     
     // TODO: update temp display too
     // TODO: also have to keep in mind the current rotation
     glActiveTexture(IMAGE_DISPLAY);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, frameWidth, frameHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, imageData);
     
-    delete imageData;
+    //delete[] imageData; // let struct handle memory management for frames
 }
 
 
 void showImageEditor(SDL_Window* window){
     static FilterParameters filterParams;
-    static GifFileType* gifImage = NULL; // TODO: make a smart pointer wrapper around this?
+    static GifFileType* gifImage = NULL; // TODO: make a smart pointer wrapper around this? need to delete at some point
+    static ReconstructedGifFrames gifFrames;
     static GLuint texture;
     static GLuint originalImage;
     static bool showImage = false;
@@ -429,22 +462,20 @@ void showImageEditor(SDL_Window* window){
                 if(gifImage == NULL){
                     // error occurred. check error*
                     std::cout << "oh no, an error occurred.\n";
+                }else{
+                    // get the gif data
+                    int getData = DGifSlurp(gifImage);
+                    if(getData == GIF_ERROR){
+                        // error occurred
+                        std::cout << "oh no, an error occurred with getting gif data.\n";
+                    }
+                    
+                    std::cout << "num gif frames: " << gifImage->ImageCount << '\n';
+                    
+                    isGif = true;
+                    
+                    reconstructGifFrames(gifFrames, gifImage);
                 }
-                
-                // get the gif data
-                int getData = DGifSlurp(gifImage);
-                if(getData == GIF_ERROR){
-                    // error occurred
-                    std::cout << "oh no, an error occurred with getting gif data.\n";
-                }
-                
-                std::cout << "num gif frames: " << gifImage->ImageCount << '\n';
-                
-                isGif = true;
-                
-                // now we can access the frames of the gif via gifImage->SavedImages
-                // image data for each SavedImage is in the GifByteType *RasterBits member
-                // GifByteType is an unsigned char
             }else{
                 isGif = false;
             }
@@ -525,7 +556,7 @@ void showImageEditor(SDL_Window* window){
         }
         */
         
-        // https://github.com/ocornut/imgui/issues/950        
+        // https://github.com/ocornut/imgui/issues/950
         char input[30];
         strcpy(input, colorText(r, g, b).c_str());
         ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(r, g, b, 255));
@@ -542,14 +573,14 @@ void showImageEditor(SDL_Window* window){
                 if(currGifFrameIndex > 0){
                     currGifFrameIndex--;
                 }
-                displayGifFrame(currGifFrameIndex, gifImage);
+                displayGifFrame(currGifFrameIndex, gifImage, gifFrames);
             }
             ImGui::SameLine();
             if(ImGui::Button("next frame")){
                 if(currGifFrameIndex < gifImage->ImageCount-1){
                     currGifFrameIndex++;
                 }
-                displayGifFrame(currGifFrameIndex, gifImage);
+                displayGifFrame(currGifFrameIndex, gifImage, gifFrames);
             }
         }
         
