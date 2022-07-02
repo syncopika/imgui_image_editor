@@ -116,8 +116,8 @@ int main(int, char**)
     srand(time(NULL));
     
     // for debugging w/ Win32
-    AllocConsole();
-    freopen("CON", "w", stdout);
+    //AllocConsole();
+    //freopen("CON", "w", stdout);
     
     // Main loop
     bool done = false;

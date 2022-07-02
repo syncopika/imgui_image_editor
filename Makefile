@@ -4,15 +4,13 @@ CXX = g++
 ECHO_MESSAGE = "MinGW"
 
 # C:\SDL2\lib -lSDL2main -lSDL2
-SDL_LIB = C:\SDL2\lib -lSDL2main -lSDL2
-#C:\libraries\SDL2-2.0.10\i686-w64-mingw32\lib -lSDL2main -lSDL2
+SDL_LIB = C:\libraries\SDL2-2.0.10\i686-w64-mingw32\lib -lSDL2main -lSDL2
 
 # -C:\SDL2\include\SDL2
-SDL_INCLUDE = C:\SDL2\include\SDL2
-#C:\libraries\SDL2-2.0.10\i686-w64-mingw32\include\SDL2
+SDL_INCLUDE = C:\libraries\SDL2-2.0.10\i686-w64-mingw32\include\SDL2
 
-#C:\libraries\glew-2.1.0\include
-OPENGL_INCLUDE = C:\glew-2.1.0\include
+#C:\glew-2.1.0\include
+OPENGL_INCLUDE = C:\libraries\glew-2.1.0\include
 
 # other dependencies like stb_img, tiny_obj_loader
 OTHER_LIBS_DIR = external
@@ -27,7 +25,7 @@ SOURCES += $(IMGUI_DIR)/imgui.cpp $(IMGUI_DIR)/imgui_demo.cpp $(IMGUI_DIR)/imgui
 SOURCES += $(IMGUI_DIR)/imgui_impl_sdl.cpp $(IMGUI_DIR)/imgui_impl_opengl3.cpp
 
 # GIFLIB dependency
-GIFLIB_SOURCE = $(GIFLIB_DIR)/dgif_lib.c $(GIFLIB_DIR)/egif_lib.c \
+GIFLIB_SOURCE = $(GIFLIB_DIR)/dgif_lib.c \
 $(GIFLIB_DIR)/gifalloc.c $(GIFLIB_DIR)/gif_font.c \
 $(GIFLIB_DIR)/gif_hash.c $(GIFLIB_DIR)/openbsd_reallocarray.c
 

@@ -21,6 +21,7 @@
 // TODO: memory management
 struct ReconstructedGifFrames {
     std::vector<unsigned char*> frames;
+    int currFrameIndex = 0;
 };
 
 std::string trimString(std::string& str);
@@ -35,11 +36,11 @@ void resizeSDLWindow(SDL_Window* window, int width, int height);
 void showImageEditor(SDL_Window* window);
 void rotateImage(int& imageWidth, int& imageHeight);
 std::vector<int> extractPixelColor(int xCoord, int yCoord, int imageWidth, int imageHeight);
-void displayGifFrame(int gifFrameIndex, GifFileType* gifImage, ReconstructedGifFrames& gifFrames);
+void displayGifFrame(GifFileType* gifImage, ReconstructedGifFrames& gifFrames);
 
 void reconstructGifFrames(ReconstructedGifFrames& gifFrames, GifFileType* gifImage); // TODO: maybe make a method of the ReconstructedGifFrames struct?
 
 void setFilter(Filter filter, std::map<Filter, bool>& filtersWithParams,  int imageWidth, int imageHeight);
-void doFilter(int imageWidth, int imageHeight, Filter filter, FilterParameters& filterParams);
+void doFilter(int imageWidth, int imageHeight, Filter filter, FilterParameters& filterParams, bool isGif, ReconstructedGifFrames& gifFrames);
 
 #endif

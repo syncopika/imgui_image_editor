@@ -181,9 +181,8 @@ void setFilter(Filter filter, std::map<Filter, bool>& filtersWithParams, int ima
     updateTempImageState(imageWidth, imageHeight);
 }
 
-void doFilter(int imageWidth, int imageHeight, Filter filter, FilterParameters& filterParams){
-    // allocate memory for the image 
-    int pixelDataLen = imageWidth*imageHeight*4; // 4 because rgba
+void doFilter(int imageWidth, int imageHeight, Filter filter, FilterParameters& filterParams, bool isGif, ReconstructedGifFrames& gifFrames){
+    int pixelDataLen = imageWidth * imageHeight * 4; // 4 because rgba
     unsigned char* pixelData = new unsigned char[pixelDataLen];
             
     // do the thing
@@ -263,7 +262,11 @@ void doFilter(int imageWidth, int imageHeight, Filter filter, FilterParameters& 
             break;
     }
     
-    // reclaim memory
+    if(isGif){
+        // update reconstructedGifFrames
+        std::copy(pixelData, pixelData + pixelDataLen, gifFrames.frames[gifFrames.currFrameIndex]);
+    }
+    
     delete[] pixelData;
 }
 
@@ -359,7 +362,7 @@ void reconstructGifFrames(ReconstructedGifFrames& gifFrames, GifFileType* gifIma
 }
 
 
-void displayGifFrame(int gifFrameIndex, GifFileType* gifImage, ReconstructedGifFrames& gifFrames){
+void displayGifFrame(GifFileType* gifImage, ReconstructedGifFrames& gifFrames){
     // https://stackoverflow.com/questions/56651645/how-do-i-get-the-rgb-colour-data-from-a-giflib-savedimage-structure
     // https://gist.github.com/suzumura-ss/a5e922994513e44226d33c3a0c2c60d1
     // https://stackoverflow.com/questions/26958369/apply-patch-between-gif-frames
@@ -373,20 +376,18 @@ void displayGifFrame(int gifFrameIndex, GifFileType* gifImage, ReconstructedGifF
           instead of running this code for each button press
     */
     
-    SavedImage currFrame = gifImage->SavedImages[gifFrameIndex];
+    SavedImage currFrame = gifImage->SavedImages[gifFrames.currFrameIndex];
     GifImageDesc imageDesc = currFrame.ImageDesc;
     int frameWidth = imageDesc.Width;
     int frameHeight = imageDesc.Height;
     
     // use reconstructedGifFrames struct to get the frame
-    unsigned char* imageData = gifFrames.frames[gifFrameIndex];
+    unsigned char* imageData = gifFrames.frames[gifFrames.currFrameIndex];
     
     // TODO: update temp display too
     // TODO: also have to keep in mind the current rotation
     glActiveTexture(IMAGE_DISPLAY);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, frameWidth, frameHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, imageData);
-    
-    //delete[] imageData; // let struct handle memory management for frames
 }
 
 
@@ -398,7 +399,6 @@ void showImageEditor(SDL_Window* window){
     static GLuint originalImage;
     static bool showImage = false;
     static bool isGif = false;
-    static int currGifFrameIndex = 0;
     static int imageHeight = 0;
     static int imageWidth = 0;
     static int originalImageHeight = 0;
@@ -442,11 +442,9 @@ void showImageEditor(SDL_Window* window){
         std::string filepath(importImageFilepath);
         
         if(trimString(filepath) != ""){
-            // TODO:
-            // if gif, use GIFLIB to get each frame so the user can go through the frames
-            // allow batch editing of frames?
+            // TODO: allow batch editing of frames?
             if(filepath.substr(filepath.size()-3) == "gif"){
-                std::cout << "you are a gif\n";
+                //std::cout << "you are a gif\n";
                 
                 if(gifImage != NULL){
                     // delete previous gif
@@ -470,7 +468,7 @@ void showImageEditor(SDL_Window* window){
                         std::cout << "oh no, an error occurred with getting gif data.\n";
                     }
                     
-                    std::cout << "num gif frames: " << gifImage->ImageCount << '\n';
+                    //std::cout << "num gif frames: " << gifImage->ImageCount << '\n';
                     
                     isGif = true;
                     
@@ -504,7 +502,7 @@ void showImageEditor(SDL_Window* window){
     }
     
     if(showImage){
-        if(ImGui::Button("rotate image")){
+        if(!isGif && ImGui::Button("rotate image")){
             rotateImage(imageWidth, imageHeight);
         }
         
@@ -570,17 +568,17 @@ void showImageEditor(SDL_Window* window){
         if(isGif){
             // https://github.com/ocornut/imgui/issues/37 ? how to work with SDL2 key input?
             if(ImGui::Button("prev frame")){
-                if(currGifFrameIndex > 0){
-                    currGifFrameIndex--;
+                if(gifFrames.currFrameIndex > 0){
+                    gifFrames.currFrameIndex--;
                 }
-                displayGifFrame(currGifFrameIndex, gifImage, gifFrames);
+                displayGifFrame(gifImage, gifFrames);
             }
             ImGui::SameLine();
             if(ImGui::Button("next frame")){
-                if(currGifFrameIndex < gifImage->ImageCount-1){
-                    currGifFrameIndex++;
+                if(gifFrames.currFrameIndex < gifImage->ImageCount-1){
+                    gifFrames.currFrameIndex++;
                 }
-                displayGifFrame(currGifFrameIndex, gifImage, gifFrames);
+                displayGifFrame(gifImage, gifFrames);
             }
         }
         
@@ -603,13 +601,13 @@ void showImageEditor(SDL_Window* window){
         // show filter options
         // GRAYSCALE
         if(ImGui::Button("grayscale")){
-            doFilter(imageWidth, imageHeight, Filter::Grayscale, filterParams);
+            doFilter(imageWidth, imageHeight, Filter::Grayscale, filterParams, isGif, gifFrames);
         }
         ImGui::SameLine();
         
         // INVERT
         if(ImGui::Button("invert")){
-            doFilter(imageWidth, imageHeight, Filter::Invert, filterParams);
+            doFilter(imageWidth, imageHeight, Filter::Invert, filterParams, isGif, gifFrames);
         }
         ImGui::SameLine();
         
@@ -668,28 +666,28 @@ void showImageEditor(SDL_Window* window){
             
             // if any of the saturation parameters change, re-run the filter
             if(d1 || d2 || d3 || d4){
-                doFilter(imageWidth, imageHeight, Filter::Saturation, filterParams);
+                doFilter(imageWidth, imageHeight, Filter::Saturation, filterParams, isGif, gifFrames);
             }
         }
         
         if(filtersWithParams[Filter::Outline]){
             ImGui::Text("outline filter parameters");
             if(ImGui::SliderInt("color difference limit", &filterParams.outlineLimit, 1, 20)){
-                doFilter(imageWidth, imageHeight, Filter::Outline, filterParams);
+                doFilter(imageWidth, imageHeight, Filter::Outline, filterParams, isGif, gifFrames);
             }
         }
         
         if(filtersWithParams[Filter::Mosaic]){
             ImGui::Text("mosaic filter parameters");
             if(ImGui::SliderInt("mosaic chunk size", &filterParams.chunkSize, 1, 20)){
-                doFilter(imageWidth, imageHeight, Filter::Mosaic, filterParams);
+                doFilter(imageWidth, imageHeight, Filter::Mosaic, filterParams, isGif, gifFrames);
             }
         }
         
         if(filtersWithParams[Filter::ChannelOffset]){
             ImGui::Text("channel offset parameters");
             if(ImGui::SliderInt("chan offset", &filterParams.chanOffset, 1, 15)){ // TODO: find out why using "channel offset" for the label produces an assertion error :0
-                doFilter(imageWidth, imageHeight, Filter::ChannelOffset, filterParams);
+                doFilter(imageWidth, imageHeight, Filter::ChannelOffset, filterParams, isGif, gifFrames);
             }
         }
         
@@ -701,14 +699,14 @@ void showImageEditor(SDL_Window* window){
             bool d3 = ImGui::SliderFloat("intensity", &filterParams.intensity, 0.0f, 1.0f);
 
             if(d1 || d2 || d3){
-                doFilter(imageWidth, imageHeight, Filter::Crt, filterParams);
+                doFilter(imageWidth, imageHeight, Filter::Crt, filterParams, isGif, gifFrames);
             }
         }
         
         if(filtersWithParams[Filter::Voronoi]){
             ImGui::Text("voronoi filter parameters");
             if(ImGui::SliderInt("neighbor count", &filterParams.voronoiNeighborCount, 10, 60)){
-                doFilter(imageWidth, imageHeight, Filter::Voronoi, filterParams);
+                doFilter(imageWidth, imageHeight, Filter::Voronoi, filterParams, isGif, gifFrames);
             }
         }
         
