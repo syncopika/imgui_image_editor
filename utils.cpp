@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "external/giflib/gif_lib.h"
+#include "external/gif.h"
 
 #include "stb_image.h"
 #include "stb_image_write.h"
@@ -138,6 +139,7 @@ void rotateImage(int& imageWidth, int& imageHeight){
     imageHeight = temp;
     
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+    
     glActiveTexture(TEMP_IMAGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
     
@@ -152,6 +154,7 @@ void updateTempImageState(int imageWidth, int imageHeight){
         
     glActiveTexture(IMAGE_DISPLAY);
     glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData); // uses currently bound texture from importImage()
+    
     glActiveTexture(TEMP_IMAGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
     
@@ -169,7 +172,8 @@ void resetImageState(int& imageWidth, int& imageHeight, int originalWidth, int o
     
     // update temp image and display image
     glActiveTexture(IMAGE_DISPLAY);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);    
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+    
     glActiveTexture(TEMP_IMAGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
     
@@ -264,6 +268,7 @@ void doFilter(int imageWidth, int imageHeight, Filter filter, FilterParameters& 
     
     if(isGif){
         // update reconstructedGifFrames
+        //std::cout << "updating frame " << gifFrames.currFrameIndex << "\n";
         std::copy(pixelData, pixelData + pixelDataLen, gifFrames.frames[gifFrames.currFrameIndex]);
     }
     
@@ -382,11 +387,13 @@ void displayGifFrame(GifFileType* gifImage, ReconstructedGifFrames& gifFrames){
     int frameHeight = imageDesc.Height;
     
     // use reconstructedGifFrames struct to get the frame
+    //std::cout << "displaying frame " << gifFrames.currFrameIndex << "\n";
     unsigned char* imageData = gifFrames.frames[gifFrames.currFrameIndex];
     
-    // TODO: update temp display too
-    // TODO: also have to keep in mind the current rotation
     glActiveTexture(IMAGE_DISPLAY);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, frameWidth, frameHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, imageData);
+    
+    glActiveTexture(TEMP_IMAGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, frameWidth, frameHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, imageData);
 }
 
@@ -473,6 +480,7 @@ void showImageEditor(SDL_Window* window){
                     isGif = true;
                     
                     reconstructGifFrames(gifFrames, gifImage);
+                    gifFrames.currFrameIndex = 0;
                 }
             }else{
                 isGif = false;
@@ -580,6 +588,8 @@ void showImageEditor(SDL_Window* window){
                 }
                 displayGifFrame(gifImage, gifFrames);
             }
+            ImGui::SameLine();
+            ImGui::Text((std::string("curr frame: ") + std::to_string(gifFrames.currFrameIndex)).c_str());
         }
         
         // be able to swap colors
@@ -720,6 +730,7 @@ void showImageEditor(SDL_Window* window){
         ImGui::InputText("image name", exportImageName, 64); // TODO: is this long enough?
         
         std::string exportName(exportImageName);
+        
         if(exportImageClicked){
             glActiveTexture(IMAGE_DISPLAY);
             
@@ -738,6 +749,48 @@ void showImageEditor(SDL_Window* window){
             delete[] pixelData;
             
             ImGui::OpenPopup("message"); // show popup
+        }
+        
+        if(isGif){
+            bool exportGifClicked = ImGui::Button("export as gif");
+            ImGui::SameLine();
+            
+            if(exportGifClicked){
+                // need to use reconstructedGifFrames struct to write frames' image data to gif
+                GifWriter gifWriter;
+                
+                // need width, height of first frame (assuming uniform dimensions for frames)
+                int width = gifImage->SavedImages[0].ImageDesc.Width;
+                int height = gifImage->SavedImages[0].ImageDesc.Height;
+                
+                // TODO: what to do for delay between frames? that info should be in GifFileType*?
+                
+                int delay = 150; // in milliseconds
+                
+                std::string gifName = exportName + ".gif";
+                GifBegin(&gifWriter, gifName.c_str(), (uint32_t)width, (uint32_t)height, (uint32_t)delay/10); // get delay from gifImage?
+                
+                for(unsigned char* frame : gifFrames.frames){
+                    GifRGBA* pixelArr = new GifRGBA[sizeof(GifRGBA)*width*height];
+                    
+                    int pixelArrIdx = 0;
+                    for(int i = 0; i < (width * height * 4) - 4; i += 4){
+                        pixelArr[pixelArrIdx].r = frame[i];
+                        pixelArr[pixelArrIdx].g = frame[i+1];
+                        pixelArr[pixelArrIdx].b = frame[i+2];
+                        pixelArr[pixelArrIdx].a = frame[i+3];
+                        pixelArrIdx++;
+                    }
+                    
+                    GifWriteFrame(&gifWriter, pixelArr, (uint32_t)width, (uint32_t)height, (uint32_t)delay/10);
+                    
+                    delete[] pixelArr;
+                }
+                
+                GifEnd(&gifWriter);
+                
+                ImGui::OpenPopup("message"); // show popup
+            }            
         }
         
         // signal that the image export happened in popup
