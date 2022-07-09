@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdlib>
 #include <iostream>
 #include <map>
 #include <sstream>
@@ -319,12 +320,7 @@ void swapColors(ImVec4& colorToChange, ImVec4& colorToChangeTo, int imageWidth, 
 
 void reconstructGifFrames(ReconstructedGifFrames& gifFrames, GifFileType* gifImage){
     // clear out old frames
-    if(!gifFrames.frames.empty()){
-        for(unsigned char* frame : gifFrames.frames){
-            delete frame;
-        }
-        gifFrames.frames.erase(gifFrames.frames.begin(), gifFrames.frames.end());
-    }
+    gifFrames.reset();
     
     assert(gifFrames.frames.empty());
     
@@ -455,8 +451,7 @@ void showImageEditor(SDL_Window* window){
                 
                 if(gifImage != NULL){
                     // delete previous gif
-                    // TODO: need to ensure proper deallocation when program quits if there is a gif
-                    delete gifImage;
+                    free(gifImage); // since GIFLIB is C, use free and not delete
                     gifImage = NULL;
                 }
                 

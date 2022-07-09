@@ -18,10 +18,22 @@
 
 // struct for holding reconstructed gif frames (making sure all the frames are properly colored
 // since each frame given back by giflib only shows pixels that changed between frames)
-// TODO: memory management
 struct ReconstructedGifFrames {
     std::vector<unsigned char*> frames;
     int currFrameIndex = 0;
+    
+    void reset(){
+        for(unsigned char* frame : frames){
+            delete[] frame;
+        }
+        frames.erase(frames.begin(), frames.end());
+        currFrameIndex = 0;
+    }
+    
+    ~ReconstructedGifFrames(){
+        //std::cout << "ReconstructedGifFrames destructor called.\n";
+        reset();
+    }
 };
 
 std::string trimString(std::string& str);
