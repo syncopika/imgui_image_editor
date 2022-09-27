@@ -585,6 +585,17 @@ void showImageEditor(SDL_Window* window){
             }
             ImGui::SameLine();
             ImGui::Text((std::string("curr frame: ") + std::to_string(gifFrames.currFrameIndex)).c_str());
+            
+            SavedImage frame = gifImage->SavedImages[gifFrames.currFrameIndex];
+            
+            // can we be sure the first extension block will always hold the delay info?
+            if(frame.ExtensionBlocks[0].ByteCount == 4){
+                // https://github.com/grimfang4/SDL_gifwrap/blob/master/SDL_gifwrap.c#L216
+                // https://gist.github.com/keefo/78a083c148b9da2d2a40
+                int delay = 10*(frame.ExtensionBlocks[0].Bytes[1] + frame.ExtensionBlocks[0].Bytes[2]*256);
+                ImGui::SameLine();
+                ImGui::Text((std::string("frame delay: ") + std::to_string(delay)).c_str());
+            }
         }
         
         // be able to swap colors
@@ -758,12 +769,18 @@ void showImageEditor(SDL_Window* window){
                 int width = gifImage->SavedImages[0].ImageDesc.Width;
                 int height = gifImage->SavedImages[0].ImageDesc.Height;
                 
-                // TODO: what to do for delay between frames? that info should be in GifFileType*?
+                // assuming uniform delay time between frames!
+                int delay = 120; // in milliseconds
                 
-                int delay = 150; // in milliseconds
+                SavedImage frame = gifImage->SavedImages[1]; // first frame doesn't have the extensionblocks data for frame delay? need to investigate
+                
+                // can we be sure the first extension block will always hold the delay info?
+                if(frame.ExtensionBlocks[0].ByteCount == 4){
+                    delay = 10*(frame.ExtensionBlocks[0].Bytes[1] + frame.ExtensionBlocks[0].Bytes[2]*256);
+                }
                 
                 std::string gifName = exportName + ".gif";
-                GifBegin(&gifWriter, gifName.c_str(), (uint32_t)width, (uint32_t)height, (uint32_t)delay/10); // get delay from gifImage?
+                GifBegin(&gifWriter, gifName.c_str(), (uint32_t)width, (uint32_t)height, (uint32_t)delay/10);
                 
                 for(unsigned char* frame : gifFrames.frames){
                     GifRGBA* pixelArr = new GifRGBA[sizeof(GifRGBA)*width*height];
