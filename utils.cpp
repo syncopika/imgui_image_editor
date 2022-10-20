@@ -393,6 +393,16 @@ void displayGifFrame(GifFileType* gifImage, ReconstructedGifFrames& gifFrames){
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, frameWidth, frameHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, imageData);
 }
 
+void getExportedFileName(std::string& specifiedExportName, std::string& currFile, const char* extension){
+    // if no name for the exported file is specified, use the imported file filepath to extract the filename
+    if(specifiedExportName == ""){
+        std::string exportNameWithoutExtension = currFile.substr(0, currFile.find_last_of(".")); // remove extension from current filepath to get just the file name
+        specifiedExportName = exportNameWithoutExtension + "-edit";
+    }
+    
+    specifiedExportName += extension;
+}
+
 
 void showImageEditor(SDL_Window* window){
     static FilterParameters filterParams;
@@ -409,6 +419,7 @@ void showImageEditor(SDL_Window* window){
     static int imageChannels = 4; //rgba
     static char importImageFilepath[FILEPATH_MAX_LENGTH] = "test_image.png";
     static char exportImageName[FILEPATH_MAX_LENGTH] = "";
+    static std::string exportNameMsg;
     static std::vector<int> selectedPixelColor{0, 0, 0, 255};
     
     // for filters that have customizable parameters,
@@ -745,10 +756,9 @@ void showImageEditor(SDL_Window* window){
         
             glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
             
-            if(exportName == ""){
-                exportName = std::string(importImageFilepath) + "-edit"; // this will include the original image's extension?
-            }
-            exportName += ".bmp";
+            std::string filepath(importImageFilepath);
+            getExportedFileName(exportName, filepath, ".bmp");
+            exportNameMsg.assign(exportName);
             
             stbi_write_bmp(exportName.c_str(), imageWidth, imageHeight, 4, (void *)pixelData);
             
@@ -779,8 +789,11 @@ void showImageEditor(SDL_Window* window){
                     delay = 10*(frame.ExtensionBlocks[0].Bytes[1] + frame.ExtensionBlocks[0].Bytes[2]*256);
                 }
                 
-                std::string gifName = exportName + ".gif";
-                GifBegin(&gifWriter, gifName.c_str(), (uint32_t)width, (uint32_t)height, (uint32_t)delay/10);
+                std::string filepath(importImageFilepath);
+                getExportedFileName(exportName, filepath, ".gif");
+                exportNameMsg.assign(exportName);
+                
+                GifBegin(&gifWriter, exportName.c_str(), (uint32_t)width, (uint32_t)height, (uint32_t)delay/10);
                 
                 for(unsigned char* frame : gifFrames.frames){
                     GifRGBA* pixelArr = new GifRGBA[sizeof(GifRGBA)*width*height];
@@ -802,12 +815,12 @@ void showImageEditor(SDL_Window* window){
                 GifEnd(&gifWriter);
                 
                 ImGui::OpenPopup("message"); // show popup
-            }            
+            }
         }
         
         // signal that the image export happened in popup
         if(ImGui::BeginPopupModal("message")){
-            ImGui::Text((std::string("exported image: ") + exportName).c_str());
+            ImGui::Text((std::string("exported image: ") + exportNameMsg).c_str()); // TODO: can the modal resize based on how much text there is?
             if(ImGui::Button("close")){
                 ImGui::CloseCurrentPopup();
             }
