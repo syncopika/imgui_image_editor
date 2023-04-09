@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <map>
@@ -362,7 +363,6 @@ void reconstructGifFrames(ReconstructedGifFrames& gifFrames, GifFileType* gifIma
     }
 }
 
-
 void displayGifFrame(GifFileType* gifImage, ReconstructedGifFrames& gifFrames){
     // https://stackoverflow.com/questions/56651645/how-do-i-get-the-rgb-colour-data-from-a-giflib-savedimage-structure
     // https://gist.github.com/suzumura-ss/a5e922994513e44226d33c3a0c2c60d1
@@ -393,6 +393,27 @@ void displayGifFrame(GifFileType* gifImage, ReconstructedGifFrames& gifFrames){
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, frameWidth, frameHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, imageData);
 }
 
+void decrementGifFrameIndex(ReconstructedGifFrames& gifFrames){
+    if(gifFrames.currFrameIndex > 0){
+        gifFrames.currFrameIndex--;
+    }
+}
+
+void incrementGifFrameIndex(ReconstructedGifFrames& gifFrames, int totalNumFrames){
+    gifFrames.currFrameIndex = (gifFrames.currFrameIndex + 1) % totalNumFrames;
+}
+
+int extractFrameDelay(SavedImage& frame){
+    for(int i = 0; i < frame.ExtensionBlockCount; i++){
+        if(frame.ExtensionBlocks[i].ByteCount == 4){
+            // https://github.com/grimfang4/SDL_gifwrap/blob/master/SDL_gifwrap.c#L216
+            // https://gist.github.com/keefo/78a083c148b9da2d2a40
+            return 10*(frame.ExtensionBlocks[i].Bytes[1] + frame.ExtensionBlocks[i].Bytes[2]*256);
+        }
+    }
+    return -1;
+}
+
 void getExportedFileName(std::string& specifiedExportName, std::string& currFile, const char* extension){
     // if no name for the exported file is specified, use the imported file filepath to extract the filename
     if(specifiedExportName == ""){
@@ -404,6 +425,8 @@ void getExportedFileName(std::string& specifiedExportName, std::string& currFile
 }
 
 
+
+
 void showImageEditor(SDL_Window* window){
     static FilterParameters filterParams;
     static GifFileType* gifImage = NULL; // TODO: make a smart pointer wrapper around this? need to delete at some point
@@ -412,6 +435,8 @@ void showImageEditor(SDL_Window* window){
     static GLuint originalImage;
     static bool showImage = false;
     static bool isGif = false;
+    static bool isAnimating = false; // for gifs and hopefully apngs
+    static Uint32 lastRender;
     static int imageHeight = 0;
     static int imageWidth = 0;
     static int originalImageHeight = 0;
@@ -581,31 +606,45 @@ void showImageEditor(SDL_Window* window){
         // TODO: if a gif image, allow traversing the frames with the keyboard left/right arrow buttons
         if(isGif){
             // https://github.com/ocornut/imgui/issues/37 ? how to work with SDL2 key input?
-            if(ImGui::Button("prev frame")){
-                if(gifFrames.currFrameIndex > 0){
-                    gifFrames.currFrameIndex--;
+            if(!isAnimating){
+                if(ImGui::Button("prev frame")){
+                    decrementGifFrameIndex(gifFrames);
+                    displayGifFrame(gifImage, gifFrames);
                 }
-                displayGifFrame(gifImage, gifFrames);
-            }
-            ImGui::SameLine();
-            if(ImGui::Button("next frame")){
-                if(gifFrames.currFrameIndex < gifImage->ImageCount-1){
-                    gifFrames.currFrameIndex++;
-                }
-                displayGifFrame(gifImage, gifFrames);
-            }
-            ImGui::SameLine();
-            ImGui::Text((std::string("curr frame: ") + std::to_string(gifFrames.currFrameIndex)).c_str());
-            
-            SavedImage frame = gifImage->SavedImages[gifFrames.currFrameIndex];
-            
-            // can we be sure the first extension block will always hold the delay info?
-            if(frame.ExtensionBlocks[0].ByteCount == 4){
-                // https://github.com/grimfang4/SDL_gifwrap/blob/master/SDL_gifwrap.c#L216
-                // https://gist.github.com/keefo/78a083c148b9da2d2a40
-                int delay = 10*(frame.ExtensionBlocks[0].Bytes[1] + frame.ExtensionBlocks[0].Bytes[2]*256);
                 ImGui::SameLine();
-                ImGui::Text((std::string("frame delay: ") + std::to_string(delay)).c_str());
+                if(ImGui::Button("next frame")){
+                    incrementGifFrameIndex(gifFrames, gifImage->ImageCount);
+                    displayGifFrame(gifImage, gifFrames);
+                }
+                ImGui::SameLine();
+                ImGui::Text((std::string("curr frame: ") + std::to_string(gifFrames.currFrameIndex)).c_str());
+                
+                SavedImage frame = gifImage->SavedImages[gifFrames.currFrameIndex];
+            
+                int delay = extractFrameDelay(frame);
+                if(delay > -1){
+                    ImGui::SameLine();
+                    ImGui::Text((std::string("frame delay: ") + std::to_string(delay)).c_str());
+                }
+                
+                if(ImGui::Button("animate")){
+                    isAnimating = true;
+                    lastRender = SDL_GetTicks();
+                }
+            }else{
+                // https://gist.github.com/jcredmond/9ef711b406e42a250daa3797ce96fd26
+                SavedImage frame = gifImage->SavedImages[gifFrames.currFrameIndex];
+                
+                int currFrameDelayMs = extractFrameDelay(frame);
+                if(currFrameDelayMs > -1 && SDL_GetTicks() - lastRender >= (Uint32)currFrameDelayMs){
+                    lastRender = SDL_GetTicks();
+                    incrementGifFrameIndex(gifFrames, gifImage->ImageCount);
+                    displayGifFrame(gifImage, gifFrames);
+                }
+                
+                if(ImGui::Button("stop animation")){
+                    isAnimating = false;
+                }
             }
         }
         
@@ -779,8 +818,7 @@ void showImageEditor(SDL_Window* window){
                 int width = gifImage->SavedImages[0].ImageDesc.Width;
                 int height = gifImage->SavedImages[0].ImageDesc.Height;
                 
-                // assuming uniform delay time between frames!
-                int delay = 120; // in milliseconds
+                int delay = 120; // set to 120 by default, in milliseconds
                 
                 SavedImage frame = gifImage->SavedImages[1]; // first frame doesn't have the extensionblocks data for frame delay? need to investigate
                 

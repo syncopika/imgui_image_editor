@@ -52,6 +52,10 @@ void displayGifFrame(GifFileType* gifImage, ReconstructedGifFrames& gifFrames);
 
 void reconstructGifFrames(ReconstructedGifFrames& gifFrames, GifFileType* gifImage); // TODO: maybe make a method of the ReconstructedGifFrames struct?
 
+void decrementGifFrameIndex(ReconstructedGifFrames& gifFrames);
+void incrementGifFrameIndex(ReconstructedGifFrames& gifFrames, int totalNumFrames);
+int extractFrameDelay(SavedImage& frame);
+
 void setFilter(Filter filter, std::map<Filter, bool>& filtersWithParams,  int imageWidth, int imageHeight);
 void doFilter(int imageWidth, int imageHeight, Filter filter, FilterParameters& filterParams, bool isGif, ReconstructedGifFrames& gifFrames);
 
