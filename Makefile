@@ -12,13 +12,13 @@ SDL_INCLUDE = C:\libraries\SDL2-2.0.10\i686-w64-mingw32\include\SDL2
 #C:\glew-2.1.0\include
 OPENGL_INCLUDE = C:\libraries\glew-2.1.0\include
 
-# other dependencies like stb_img, tiny_obj_loader
+# other dependencies like stb_img
 OTHER_LIBS_DIR = external
 GIFLIB_DIR = external/giflib
 IMGUI_DIR = imgui
 
 SOURCES = image_editor.cpp
-SOURCES += stbi.cpp utils.cpp filters.cpp voronoi_helper.cpp
+SOURCES += utils.cpp filters.cpp voronoi_helper.cpp
 SOURCES += $(IMGUI_DIR)/imgui.cpp $(IMGUI_DIR)/imgui_demo.cpp $(IMGUI_DIR)/imgui_draw.cpp $(IMGUI_DIR)/imgui_tables.cpp $(IMGUI_DIR)/imgui_widgets.cpp
 
 # specific to our backend (sdl + opengl)

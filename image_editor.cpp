@@ -65,6 +65,12 @@ int main(int, char**)
     const int sdlWidth = 1080;
     const int sdlHeight = 720;
     SDL_Window* window = SDL_CreateWindow("ImageEditor", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, sdlWidth, sdlHeight, window_flags);
+    
+    SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    if(renderer == NULL){
+        std::cout << "error creating renderer\n";
+    }
+    
     SDL_GLContext gl_context = SDL_GL_CreateContext(window);
     SDL_GL_MakeCurrent(window, gl_context);
     SDL_GL_SetSwapInterval(1); // Enable vsync
@@ -153,7 +159,7 @@ int main(int, char**)
         //if (show_demo_window)
         //    ImGui::ShowDemoWindow(&show_demo_window);
         
-        showImageEditor(window);
+        showImageEditor(window, renderer);
         
         ImGui::End();
 
@@ -175,6 +181,7 @@ int main(int, char**)
 
     SDL_GL_DeleteContext(gl_context);
     SDL_DestroyWindow(window);
+    SDL_DestroyRenderer(renderer);
     SDL_Quit();
 
     return 0;

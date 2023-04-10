@@ -13,7 +13,10 @@
 #include "external/giflib/gif_lib.h"
 #include "external/gif.h"
 
+#define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+
+#define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
 #define FILEPATH_MAX_LENGTH 260
@@ -45,7 +48,9 @@ bool importImage(const char* filename, GLuint* tex, GLuint* originalImage, int* 
     int imageWidth = 0;
     int imageHeight = 0;
     int imageChannels = 4;
+    
     stbi_set_flip_vertically_on_load(false);
+    
     unsigned char* imageData = stbi_load(filename, &imageWidth, &imageHeight, &imageChannels, 4);
     if(imageData == NULL){
         return false;
@@ -393,6 +398,122 @@ void displayGifFrame(GifFileType* gifImage, ReconstructedGifFrames& gifFrames){
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, frameWidth, frameHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, imageData);
 }
 
+void setupAPNGFrames(APNGData& pngData, SDL_Renderer* renderer){
+    int pitchCoeff;
+    int depth;
+    if(pngData.reqFormat == STBI_rgb){
+        pitchCoeff = 3;
+        depth = 24;
+    }else{
+        pitchCoeff = 4;
+        depth = 32;
+    }
+    
+    stbi__apng_directory* dir = (stbi__apng_directory*) (pngData.data + pngData.dirOffset);
+    //stbi__apng_frame_directory_entry* frame = &(dir->frames[pngData.currFrame]);
+    
+    int numFrames = dir->num_frames;
+    pngData.numFrames = numFrames;
+    
+    pngData.textures = (SDL_Texture**)malloc(numFrames * sizeof(pngData.textures[0])); // TODO: make sure to free!
+    if(pngData.textures == NULL){
+        std::cout << "error allocating textures for apng\n";
+        return;
+    }
+    
+    size_t offset = 0;
+    for(int i = 0; i < numFrames; i++){
+        size_t frameSize = dir->frames[i].width * dir->frames[i].height * pitchCoeff;
+        int pitch = pitchCoeff * dir->frames[i].width;
+        
+        SDL_Surface* surface = SDL_CreateRGBSurfaceFrom(
+            (void *)(pngData.data + offset),
+            dir->frames[i].width,
+            dir->frames[i].height,
+            depth,
+            pitch,
+            0x000000ff,
+            0x0000ff00,
+            0x00ff0000,
+            (pngData.reqFormat == STBI_rgb) ? 0 : 0xff000000
+        );
+        if(surface == NULL){
+            fprintf(stderr, "failed to create surface: %s\n", SDL_GetError());
+            return;
+        }
+        
+        pngData.textures[i] = SDL_CreateTextureFromSurface(renderer, surface);
+        if(pngData.textures[i] == NULL){
+			fprintf(stderr, "failed to create texture: %s\n", SDL_GetError());
+		}
+        
+        offset += frameSize;
+        
+        SDL_FreeSurface(surface);
+    }
+}
+
+void displayAPNGFrame(APNGData& pngData, SDL_Renderer* renderer){
+    stbi__apng_directory* dir = (stbi__apng_directory*) (pngData.data + pngData.dirOffset);
+    stbi__apng_frame_directory_entry* frame = &(dir->frames[pngData.currFrame]);
+    
+    int pitchCoeff;
+    if(pngData.reqFormat == STBI_rgb){
+        pitchCoeff = 3;
+    }else{
+        pitchCoeff = 4;
+    }
+    
+    // just the changed pixels for curr frame
+    SDL_Rect destRect;
+    destRect.x = frame->x_offset;
+    destRect.y = frame->y_offset;
+    destRect.w = frame->width;
+    destRect.h = frame->height;
+    
+    if (frame->dispose_op == STBI_APNG_dispose_op_background) {
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_TRANSPARENT);
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+        SDL_RenderFillRect(renderer, &destRect);
+    }
+    
+    //SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
+    //SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+    //SDL_RenderClear(renderer);
+
+    SDL_RenderCopy(renderer, pngData.textures[pngData.currFrame], NULL, &destRect);
+    
+    // rect representing the full image
+    SDL_Rect rect;
+    rect.x = 0;
+    rect.y = 0;
+    rect.w = pngData.width;
+    rect.h = pngData.height;
+    
+    unsigned char* imageData = (unsigned char*) malloc(pitchCoeff * pngData.width * pngData.height * sizeof(unsigned char));
+    
+    int getImageData = SDL_RenderReadPixels(
+                         renderer,
+                         &rect,
+                         SDL_PIXELFORMAT_RGBA32,
+                         imageData,
+                         pitchCoeff * pngData.width
+                       );
+                       
+    if(getImageData < 0){
+        std::cout << "error reading pixels from renderer\n";
+        return;
+    }
+    
+    glActiveTexture(IMAGE_DISPLAY);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, pngData.width, pngData.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, imageData);
+    
+    glActiveTexture(TEMP_IMAGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, pngData.width, pngData.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, imageData);
+
+    free(imageData);
+}
+
 void decrementGifFrameIndex(ReconstructedGifFrames& gifFrames){
     if(gifFrames.currFrameIndex > 0){
         gifFrames.currFrameIndex--;
@@ -426,16 +547,17 @@ void getExportedFileName(std::string& specifiedExportName, std::string& currFile
 
 
 
-
-void showImageEditor(SDL_Window* window){
+void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
     static FilterParameters filterParams;
     static GifFileType* gifImage = NULL; // TODO: make a smart pointer wrapper around this? need to delete at some point
     static ReconstructedGifFrames gifFrames;
+    static APNGData apngData;
     static GLuint texture;
     static GLuint originalImage;
     static bool showImage = false;
     static bool isGif = false;
-    static bool isAnimating = false; // for gifs and hopefully apngs
+    static bool isAPNG = false; // is animated PNG
+    static bool isAnimating = false; // for gifs and apngs
     static Uint32 lastRender;
     static int imageHeight = 0;
     static int imageWidth = 0;
@@ -481,16 +603,28 @@ void showImageEditor(SDL_Window* window){
         std::string filepath(importImageFilepath);
         
         if(trimString(filepath) != ""){
+            // free up any previous resources
+            if(gifImage != NULL){
+                // delete previous gif
+                free(gifImage); // since GIFLIB is C, use free and not delete
+                gifImage = NULL;
+                isGif = false;
+            }else if(isAPNG && apngData.data != NULL){
+                // delete previous apng
+                stbi_image_free(apngData.data);
+                apngData.data = NULL;
+                isAPNG = false;
+                if(apngData.textures != NULL){
+                    for(int i = 0; i < apngData.numFrames; i++){
+                        SDL_DestroyTexture(apngData.textures[i]);
+                    }
+                    free(apngData.textures);
+                    apngData.textures = NULL;
+                }
+            }
+            
             // TODO: allow batch editing of frames?
             if(filepath.substr(filepath.size()-3) == "gif"){
-                //std::cout << "you are a gif\n";
-                
-                if(gifImage != NULL){
-                    // delete previous gif
-                    free(gifImage); // since GIFLIB is C, use free and not delete
-                    gifImage = NULL;
-                }
-                
                 int error;
                 std::cout << "creating a new GifFileType\n";
                 gifImage = DGifOpenFileName(filepath.c_str(), &error);
@@ -505,16 +639,42 @@ void showImageEditor(SDL_Window* window){
                         // error occurred
                         std::cout << "oh no, an error occurred with getting gif data.\n";
                     }
-                    
                     //std::cout << "num gif frames: " << gifImage->ImageCount << '\n';
-                    
                     isGif = true;
-                    
                     reconstructGifFrames(gifFrames, gifImage);
                     gifFrames.currFrameIndex = 0;
                 }
-            }else{
-                isGif = false;
+            }
+            
+            if(filepath.substr(filepath.size()-3) == "png"){
+                // https://gist.github.com/jcredmond/9ef711b406e42a250daa3797ce96fd26
+                // need to check if apng
+                stbi__context s;
+                FILE* f = NULL;
+                if(!(f = stbi__fopen(filepath.c_str(), "rb"))){
+                    std::cout << "oh no, couldn't open png\n";
+                }else{
+                    stbi__start_file(&s, f);
+                    apngData.data = stbi__apng_load_8bit(
+                        &s,
+                        &apngData.width,
+                        &apngData.height,
+                        &apngData.origFormat,
+                        STBI_rgb_alpha,
+                        &apngData.dirOffset
+                    );
+                    if(apngData.data && apngData.dirOffset > 0){
+                        isAPNG = true;
+                        setupAPNGFrames(apngData, renderer);
+                    }else{
+                        if(apngData.data){
+                            // just a regular png
+                            stbi_image_free(apngData.data);
+                            apngData.data = NULL;
+                        }
+                    }
+                    fclose(f);
+                }
             }
             
             bool loaded = importImage(
@@ -640,6 +800,43 @@ void showImageEditor(SDL_Window* window){
                     lastRender = SDL_GetTicks();
                     incrementGifFrameIndex(gifFrames, gifImage->ImageCount);
                     displayGifFrame(gifImage, gifFrames);
+                }
+                
+                if(ImGui::Button("stop animation")){
+                    isAnimating = false;
+                }
+            }
+        }else if(isAPNG){
+            stbi__apng_directory* dir = (stbi__apng_directory*) (apngData.data + apngData.dirOffset);
+            if(!isAnimating){
+                if(ImGui::Button("prev frame")){
+                    if(apngData.currFrame > 0){
+                        apngData.currFrame--;
+                        displayAPNGFrame(apngData, renderer);
+                    }
+                }
+                ImGui::SameLine();
+                if(ImGui::Button("next frame")){
+                    apngData.currFrame = (apngData.currFrame + 1) % dir->num_frames;
+                    displayAPNGFrame(apngData, renderer);
+                }
+                ImGui::SameLine();
+                ImGui::Text((std::string("curr frame: ") + std::to_string(apngData.currFrame)).c_str());
+                
+                int currFrameDelayMs = (int)((float)dir->frames[apngData.currFrame].delay_num / 100.0f * 1000.0f); // delay_num is in 1/100 of a second
+                ImGui::SameLine();
+                ImGui::Text((std::string("frame delay: ") + std::to_string(currFrameDelayMs)).c_str());
+                
+                if(ImGui::Button("animate")){
+                    isAnimating = true;
+                    lastRender = SDL_GetTicks();
+                }
+            }else{
+                int currFrameDelayMs = (int)((float)dir->frames[apngData.currFrame].delay_num / 100.0f * 1000.0f);
+                if(currFrameDelayMs > -1 && SDL_GetTicks() - lastRender >= (Uint32)currFrameDelayMs){
+                    lastRender = SDL_GetTicks();
+                    apngData.currFrame = (apngData.currFrame + 1) % dir->num_frames;
+                    displayAPNGFrame(apngData, renderer);
                 }
                 
                 if(ImGui::Button("stop animation")){
@@ -818,14 +1015,9 @@ void showImageEditor(SDL_Window* window){
                 int width = gifImage->SavedImages[0].ImageDesc.Width;
                 int height = gifImage->SavedImages[0].ImageDesc.Height;
                 
-                int delay = 120; // set to 120 by default, in milliseconds
+                SavedImage frame = gifImage->SavedImages[1];
                 
-                SavedImage frame = gifImage->SavedImages[1]; // first frame doesn't have the extensionblocks data for frame delay? need to investigate
-                
-                // can we be sure the first extension block will always hold the delay info?
-                if(frame.ExtensionBlocks[0].ByteCount == 4){
-                    delay = 10*(frame.ExtensionBlocks[0].Bytes[1] + frame.ExtensionBlocks[0].Bytes[2]*256);
-                }
+                int delay = extractFrameDelay(frame);
                 
                 std::string filepath(importImageFilepath);
                 getExportedFileName(exportName, filepath, ".gif");
