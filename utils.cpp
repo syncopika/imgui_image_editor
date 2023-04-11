@@ -399,6 +399,10 @@ void displayGifFrame(GifFileType* gifImage, ReconstructedGifFrames& gifFrames){
 }
 
 void setupAPNGFrames(APNGData& pngData, SDL_Renderer* renderer){
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+    SDL_RenderClear(renderer);
+    
     int pitchCoeff;
     int depth;
     if(pngData.reqFormat == STBI_rgb){
@@ -451,6 +455,15 @@ void setupAPNGFrames(APNGData& pngData, SDL_Renderer* renderer){
         
         SDL_FreeSurface(surface);
     }
+    
+    // put the first texture on the renderer because it's not there yet.
+    // this'll be the base for the subsequent frames
+    SDL_Rect destRect;
+    destRect.x = dir->frames[0].x_offset;
+    destRect.y = dir->frames[0].y_offset;
+    destRect.w = dir->frames[0].width;
+    destRect.h = dir->frames[0].height;
+    SDL_RenderCopy(renderer, pngData.textures[pngData.currFrame], NULL, &destRect);
 }
 
 void displayAPNGFrame(APNGData& pngData, SDL_Renderer* renderer){
@@ -481,8 +494,10 @@ void displayAPNGFrame(APNGData& pngData, SDL_Renderer* renderer){
     //SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
     //SDL_RenderClear(renderer);
 
+    // slap on the changed pixels to the renderer
     SDL_RenderCopy(renderer, pngData.textures[pngData.currFrame], NULL, &destRect);
     
+    // then get the whole image and write it to the gl texture
     // rect representing the full image
     SDL_Rect rect;
     rect.x = 0;
@@ -614,13 +629,7 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
                 stbi_image_free(apngData.data);
                 apngData.data = NULL;
                 isAPNG = false;
-                if(apngData.textures != NULL){
-                    for(int i = 0; i < apngData.numFrames; i++){
-                        SDL_DestroyTexture(apngData.textures[i]);
-                    }
-                    free(apngData.textures);
-                    apngData.textures = NULL;
-                }
+                apngData.reset();
             }
             
             // TODO: allow batch editing of frames?
@@ -671,6 +680,7 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
                             // just a regular png
                             stbi_image_free(apngData.data);
                             apngData.data = NULL;
+                            apngData.reset();
                         }
                     }
                     fclose(f);
@@ -802,6 +812,8 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
                     displayGifFrame(gifImage, gifFrames);
                 }
                 
+                ImGui::Text((std::string("curr frame: ") + std::to_string(gifFrames.currFrameIndex)).c_str());
+                
                 if(ImGui::Button("stop animation")){
                     isAnimating = false;
                 }
@@ -838,6 +850,8 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
                     apngData.currFrame = (apngData.currFrame + 1) % dir->num_frames;
                     displayAPNGFrame(apngData, renderer);
                 }
+                
+                ImGui::Text((std::string("curr frame: ") + std::to_string(apngData.currFrame)).c_str());
                 
                 if(ImGui::Button("stop animation")){
                     isAnimating = false;

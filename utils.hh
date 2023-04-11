@@ -47,6 +47,23 @@ struct APNGData {
     int numFrames = 0;
     SDL_Texture** textures = NULL;
     unsigned char* data = NULL;
+    
+    void reset(){
+        height = 0;
+        width = 0;
+        origFormat = 0;
+        reqFormat = 0;
+        currFrame = 0;
+        numFrames = 0;
+        
+        if(textures != NULL){
+            for(int i = 0; i < numFrames; i++){
+                SDL_DestroyTexture(textures[i]);
+            }
+            free(textures);
+            textures = NULL;
+        }
+    }
 };
 
 std::string trimString(std::string& str);
