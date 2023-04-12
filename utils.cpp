@@ -414,12 +414,11 @@ void setupAPNGFrames(APNGData& pngData, SDL_Renderer* renderer){
     }
     
     stbi__apng_directory* dir = (stbi__apng_directory*) (pngData.data + pngData.dirOffset);
-    //stbi__apng_frame_directory_entry* frame = &(dir->frames[pngData.currFrame]);
     
     int numFrames = dir->num_frames;
     pngData.numFrames = numFrames;
     
-    pngData.textures = (SDL_Texture**)malloc(numFrames * sizeof(pngData.textures[0])); // TODO: make sure to free!
+    pngData.textures = (SDL_Texture**)malloc(numFrames * sizeof(pngData.textures[0]));
     if(pngData.textures == NULL){
         std::cout << "error allocating textures for apng\n";
         return;
@@ -477,24 +476,44 @@ void displayAPNGFrame(APNGData& pngData, SDL_Renderer* renderer){
         pitchCoeff = 4;
     }
     
-    // just the changed pixels for curr frame
     SDL_Rect destRect;
+    
+    // https://wiki.mozilla.org/APNG_Specification
+    // dispose operations are based on previous frame since they need to be done
+    // before rendering the current frame
+    if(pngData.currFrame > 0){
+        stbi__apng_frame_directory_entry* prevFrame = &(dir->frames[pngData.currFrame - 1]); 
+        destRect.x = prevFrame->x_offset;
+        destRect.y = prevFrame->y_offset;
+        destRect.w = prevFrame->width;
+        destRect.h = prevFrame->height;
+        if(prevFrame->dispose_op == STBI_APNG_dispose_op_background){
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_TRANSPARENT);
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+            SDL_RenderFillRect(renderer, &destRect);
+        }else if(prevFrame->dispose_op == STBI_APNG_dispose_op_previous){
+            // TODO
+        }
+    }
+    
+    // just the changed pixels for curr frame
     destRect.x = frame->x_offset;
     destRect.y = frame->y_offset;
     destRect.w = frame->width;
     destRect.h = frame->height;
     
-    if (frame->dispose_op == STBI_APNG_dispose_op_background) {
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_TRANSPARENT);
-        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
-        SDL_RenderFillRect(renderer, &destRect);
+    if(frame->blend_op == STBI_APNG_blend_op_source){
+        SDL_SetTextureBlendMode(pngData.textures[pngData.currFrame], SDL_BLENDMODE_NONE);
+    }else if(frame->blend_op == STBI_APNG_blend_op_over){
+        // TODO: not sure SDL_BLENDMODE_BLEND is correct...
+        SDL_SetTextureBlendMode(pngData.textures[pngData.currFrame], SDL_BLENDMODE_BLEND);
     }
     
     //SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
     //SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
     //SDL_RenderClear(renderer);
 
-    // slap on the changed pixels to the renderer
+    // slap on the changed pixels specified by the current frame to the renderer
     SDL_RenderCopy(renderer, pngData.textures[pngData.currFrame], NULL, &destRect);
     
     // then get the whole image and write it to the gl texture
@@ -527,6 +546,17 @@ void displayAPNGFrame(APNGData& pngData, SDL_Renderer* renderer){
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, pngData.width, pngData.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, imageData);
 
     free(imageData);
+}
+
+int getAPNGDelay(int delayNumerator, int delayDenominator){
+    int currFrameDelayMs = (int)((float)delayNumerator / 100.0f * 1000.0f); // delay_num is in 1/100 of a second
+    
+    // each frame has a delay_num (numerator) and delay_den (denominator)
+    if(delayDenominator != 0){
+        currFrameDelayMs = (int)(((float)delayNumerator / delayDenominator) * 1000.0f);
+    }
+    
+    return currFrameDelayMs;
 }
 
 void decrementGifFrameIndex(ReconstructedGifFrames& gifFrames){
@@ -820,6 +850,8 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
             }
         }else if(isAPNG){
             stbi__apng_directory* dir = (stbi__apng_directory*) (apngData.data + apngData.dirOffset);
+            stbi__apng_frame_directory_entry* frame = &dir->frames[apngData.currFrame];
+            
             if(!isAnimating){
                 if(ImGui::Button("prev frame")){
                     if(apngData.currFrame > 0){
@@ -835,16 +867,28 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
                 ImGui::SameLine();
                 ImGui::Text((std::string("curr frame: ") + std::to_string(apngData.currFrame)).c_str());
                 
-                int currFrameDelayMs = (int)((float)dir->frames[apngData.currFrame].delay_num / 100.0f * 1000.0f); // delay_num is in 1/100 of a second
+                int currFrameDelayMs = getAPNGDelay(frame->delay_num, frame->delay_den);
+                
                 ImGui::SameLine();
                 ImGui::Text((std::string("frame delay: ") + std::to_string(currFrameDelayMs)).c_str());
+                
+                // TODO: make this info collapsible if possible?
+				ImGui::Text((std::string("width      :") + std::to_string(frame->width)).c_str());
+				ImGui::Text((std::string("height     :") + std::to_string(frame->height)).c_str());
+				ImGui::Text((std::string("x_offset   :") + std::to_string(frame->x_offset)).c_str());
+				ImGui::Text((std::string("y_offset   :") + std::to_string(frame->y_offset)).c_str());
+				ImGui::Text((std::string("delay_num  :") + std::to_string(frame->delay_num)).c_str());
+				ImGui::Text((std::string("delay_den  :") + std::to_string(frame->delay_den)).c_str());
+				ImGui::Text((std::string("dispose_op :") + std::to_string(frame->dispose_op)).c_str());
+				ImGui::Text((std::string("blend_op   :") + std::to_string(frame->blend_op)).c_str());
                 
                 if(ImGui::Button("animate")){
                     isAnimating = true;
                     lastRender = SDL_GetTicks();
                 }
             }else{
-                int currFrameDelayMs = (int)((float)dir->frames[apngData.currFrame].delay_num / 100.0f * 1000.0f);
+                int currFrameDelayMs = getAPNGDelay(frame->delay_num, frame->delay_den);
+                
                 if(currFrameDelayMs > -1 && SDL_GetTicks() - lastRender >= (Uint32)currFrameDelayMs){
                     lastRender = SDL_GetTicks();
                     apngData.currFrame = (apngData.currFrame + 1) % dir->num_frames;

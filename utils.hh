@@ -82,6 +82,7 @@ void displayGifFrame(GifFileType* gifImage, ReconstructedGifFrames& gifFrames);
 
 void setupAPNGFrames(APNGData& pngData, SDL_Renderer* renderer);
 void displayAPNGFrame(APNGData& pngData, SDL_Renderer* renderer);
+int getAPNGDelay(int delayNumerator, int delayDenominator);
 
 void reconstructGifFrames(ReconstructedGifFrames& gifFrames, GifFileType* gifImage); // TODO: maybe make a method of the ReconstructedGifFrames struct?
 
