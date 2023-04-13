@@ -36,6 +36,36 @@ struct ReconstructedGifFrames {
     }
 };
 
+// https://gist.github.com/jcredmond/9ef711b406e42a250daa3797ce96fd26
+struct APNGData {
+    size_t dirOffset = 0; // regular PNG if offset == 0
+    int height = 0;
+    int width = 0;
+    int origFormat = 0;
+    int reqFormat = 0;
+    int currFrame = 0;
+    int numFrames = 0;
+    SDL_Texture** textures = NULL;
+    unsigned char* data = NULL;
+    
+    void reset(){
+        height = 0;
+        width = 0;
+        origFormat = 0;
+        reqFormat = 0;
+        currFrame = 0;
+        numFrames = 0;
+        
+        if(textures != NULL){
+            for(int i = 0; i < numFrames; i++){
+                SDL_DestroyTexture(textures[i]);
+            }
+            free(textures);
+            textures = NULL;
+        }
+    }
+};
+
 std::string trimString(std::string& str);
 std::string colorText(int r, int g, int b);
 
@@ -45,12 +75,20 @@ void swapColors(ImVec4& colorToChange, ImVec4& colorToChangeTo, int imageWidth, 
 void updateTempImageState(int imageWidth, int imageHeight);
 void resetImageState(int& imageWidth, int& imageHeight, int originalWidth, int originalHeight);
 void resizeSDLWindow(SDL_Window* window, int width, int height);
-void showImageEditor(SDL_Window* window);
+void showImageEditor(SDL_Window* window, SDL_Renderer* renderer);
 void rotateImage(int& imageWidth, int& imageHeight);
 std::vector<int> extractPixelColor(int xCoord, int yCoord, int imageWidth, int imageHeight);
 void displayGifFrame(GifFileType* gifImage, ReconstructedGifFrames& gifFrames);
 
+void setupAPNGFrames(APNGData& pngData, SDL_Renderer* renderer);
+void displayAPNGFrame(APNGData& pngData, SDL_Renderer* renderer);
+int getAPNGDelay(int delayNumerator, int delayDenominator);
+
 void reconstructGifFrames(ReconstructedGifFrames& gifFrames, GifFileType* gifImage); // TODO: maybe make a method of the ReconstructedGifFrames struct?
+
+void decrementGifFrameIndex(ReconstructedGifFrames& gifFrames);
+void incrementGifFrameIndex(ReconstructedGifFrames& gifFrames, int totalNumFrames);
+int extractFrameDelay(SavedImage& frame);
 
 void setFilter(Filter filter, std::map<Filter, bool>& filtersWithParams,  int imageWidth, int imageHeight);
 void doFilter(int imageWidth, int imageHeight, Filter filter, FilterParameters& filterParams, bool isGif, ReconstructedGifFrames& gifFrames);
