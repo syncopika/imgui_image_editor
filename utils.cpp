@@ -274,7 +274,7 @@ void doFilter(int imageWidth, int imageHeight, Filter filter, FilterParameters& 
     }
     
     if(isGif){
-        // update reconstructedGifFrames
+        // update reconstructedGifFrames - this modifies the stored image data for this frame!
         //std::cout << "updating frame " << gifFrames.currFrameIndex << "\n";
         std::copy(pixelData, pixelData + pixelDataLen, gifFrames.frames[gifFrames.currFrameIndex]);
     }
@@ -392,6 +392,9 @@ void displayGifFrame(GifFileType* gifImage, ReconstructedGifFrames& gifFrames){
     unsigned char* imageData = gifFrames.frames[gifFrames.currFrameIndex];
     
     glActiveTexture(IMAGE_DISPLAY);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, frameWidth, frameHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, imageData);
+    
+    glActiveTexture(ORIGINAL_IMAGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, frameWidth, frameHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, imageData);
     
     glActiveTexture(TEMP_IMAGE);
@@ -973,6 +976,17 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
         // RESET IMAGE
         if(ImGui::Button("reset image")){
             resetImageState(imageWidth, imageHeight, originalImageWidth, originalImageHeight);
+            
+            if(isGif){
+                // if a gif frame, we need to reset the stored pixel data to its original state
+                int pixelDataLen = imageWidth * imageHeight * 4;
+                unsigned char* pixelData = new unsigned char[pixelDataLen];
+                glActiveTexture(ORIGINAL_IMAGE);
+                glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+                std::copy(pixelData, pixelData + pixelDataLen, gifFrames.frames[gifFrames.currFrameIndex]);
+                delete[] pixelData;
+            }
+            
             filterParams.generateRandNum3();
         }
         
