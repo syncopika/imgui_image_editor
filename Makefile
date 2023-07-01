@@ -18,7 +18,7 @@ GIFLIB_DIR = external/giflib
 IMGUI_DIR = imgui
 
 SOURCES = image_editor.cpp
-SOURCES += utils.cpp filters.cpp voronoi_helper.cpp
+SOURCES += utils.cpp filters.cpp voronoi_helper.cpp thinning_helper.cpp
 SOURCES += $(IMGUI_DIR)/imgui.cpp $(IMGUI_DIR)/imgui_demo.cpp $(IMGUI_DIR)/imgui_draw.cpp $(IMGUI_DIR)/imgui_tables.cpp $(IMGUI_DIR)/imgui_widgets.cpp
 
 # specific to our backend (sdl + opengl)
