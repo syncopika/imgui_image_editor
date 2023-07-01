@@ -269,6 +269,14 @@ void doFilter(int imageWidth, int imageHeight, Filter filter, FilterParameters& 
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
             break;
         }
+        case Filter::Thinning: {
+            glActiveTexture(TEMP_IMAGE);
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            thinning(pixelData, pixelDataLen, imageWidth, imageHeight, filterParams);
+            glActiveTexture(IMAGE_DISPLAY);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            break;
+        }
         default:
             break;
     }
@@ -625,7 +633,8 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
         {Filter::Mosaic, false},
         {Filter::ChannelOffset, false},
         {Filter::Crt, false},
-        {Filter::Voronoi, false}
+        {Filter::Voronoi, false},
+        {Filter::Thinning, false}
     };
     
     bool importImageClicked = ImGui::Button("import image");
@@ -744,8 +753,27 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
     }
     
     if(showImage){
+        // ROTATE IMAGE
         if(!isGif && ImGui::Button("rotate image")){
             rotateImage(imageWidth, imageHeight);
+        }
+        ImGui::SameLine();
+        
+        // RESET IMAGE
+        if(ImGui::Button("reset image")){
+            resetImageState(imageWidth, imageHeight, originalImageWidth, originalImageHeight);
+            
+            if(isGif){
+                // if a gif frame, we need to reset the stored pixel data to its original state
+                int pixelDataLen = imageWidth * imageHeight * 4;
+                unsigned char* pixelData = new unsigned char[pixelDataLen];
+                glActiveTexture(ORIGINAL_IMAGE);
+                glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+                std::copy(pixelData, pixelData + pixelDataLen, gifFrames.frames[gifFrames.currFrameIndex]);
+                delete[] pixelData;
+            }
+            
+            filterParams.generateRandNum3();
         }
         
         ImGui::Text("size = %d x %d", imageWidth, imageHeight);
@@ -969,26 +997,13 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
         if(ImGui::Button("voronoi")){
             setFilter(Filter::Voronoi, filtersWithParams, imageWidth, imageHeight);
         }
+        ImGui::SameLine();
         
-        // spacer
-        ImGui::Dummy(ImVec2(0.0f, 2.0f));
-        
-        // RESET IMAGE
-        if(ImGui::Button("reset image")){
-            resetImageState(imageWidth, imageHeight, originalImageWidth, originalImageHeight);
-            
-            if(isGif){
-                // if a gif frame, we need to reset the stored pixel data to its original state
-                int pixelDataLen = imageWidth * imageHeight * 4;
-                unsigned char* pixelData = new unsigned char[pixelDataLen];
-                glActiveTexture(ORIGINAL_IMAGE);
-                glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
-                std::copy(pixelData, pixelData + pixelDataLen, gifFrames.frames[gifFrames.currFrameIndex]);
-                delete[] pixelData;
-            }
-            
-            filterParams.generateRandNum3();
+        // Thinning
+        if(ImGui::Button("thinning")){
+            setFilter(Filter::Thinning, filtersWithParams, imageWidth, imageHeight);
         }
+        ImGui::SameLine();
         
         if(filtersWithParams[Filter::Saturation]){
             ImGui::Text("saturation filter parameters");
@@ -1042,6 +1057,13 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
             ImGui::Text("voronoi filter parameters");
             if(ImGui::SliderInt("neighbor count", &filterParams.voronoiNeighborCount, 10, 60)){
                 doFilter(imageWidth, imageHeight, Filter::Voronoi, filterParams, isGif, gifFrames);
+            }
+        }
+        
+        if(filtersWithParams[Filter::Thinning]){
+            ImGui::Text("thinning filter parameters");
+            if(ImGui::SliderInt("iterations", &filterParams.thinningIterations, 1, 100)){
+                doFilter(imageWidth, imageHeight, Filter::Thinning, filterParams, isGif, gifFrames);
             }
         }
         

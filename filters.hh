@@ -33,6 +33,9 @@ struct FilterParameters {
     // for Voronoi
     int voronoiNeighborCount = 30;
     
+    // for Hilditch thinning
+    int thinningIterations = 1;
+    
     void generateRandNum3(){
         chanOffsetRandNum = rand() % 3;
     }
@@ -46,7 +49,8 @@ enum Filter {
     Mosaic,
     ChannelOffset,
     Crt,
-    Voronoi
+    Voronoi,
+    Thinning
 };
 
 int correctRGB(int channel);
@@ -59,5 +63,6 @@ void mosaic(unsigned char* imageData, unsigned char* sourceImageCopy, int imageW
 void channelOffset(unsigned char* imageData, unsigned char* sourceImageCopy, int imageWidth, int imageHeight, FilterParameters& params);
 void crt(unsigned char* imageData, unsigned char* sourceImageCopy, int imageWidth, int imageHeight, FilterParameters& params);
 void voronoi(unsigned char* imageData, int pixelDataLen, int width, int height, FilterParameters& params);
+void thinning(unsigned char* imageData, int pixelDataLen, int width, int height, FilterParameters& params);
 
 #endif

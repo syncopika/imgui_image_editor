@@ -1,5 +1,6 @@
 #include "filters.hh"
 #include "voronoi_helper.hh"
+#include "thinning_helper.hh"
 
 int correctRGB(int channel){
     if(channel > 255){
@@ -258,4 +259,46 @@ void voronoi(unsigned char* imageData, int pixelDataLen, int width, int height, 
     }
     
     deleteTree(kdtree);
+}
+
+void thinning(unsigned char* imageData, int pixelDataLen, int width, int height, FilterParameters& params){
+    int numIterations = params.thinningIterations;
+    unsigned char* binarized = new unsigned char[pixelDataLen];
+    unsigned char* binarizedCopy = new unsigned char[pixelDataLen];
+    float threshold = 0.5;
+    
+    while(numIterations > 0){
+        // get a grayscale copy and convert to black/white based on a threshold
+        memcpy(binarized, imageData, pixelDataLen);
+        
+        binarize(binarized, width, height, threshold);
+        
+        memcpy(binarizedCopy, binarized, pixelDataLen);
+        
+        for(int i = 0; i < height; i++){
+            for(int j = 0; j < width; j++){
+                if(
+                    isBlackPixel(binarized, i, j, width) &&
+                    checkBlackNeighbors(binarized, pixelDataLen, i, j, width) &&
+                    testConnectivity(binarized, pixelDataLen, i, j, width) &&
+                    verticalLineCheck(binarized, pixelDataLen, i, j, width) &&
+                    horizontalLineCheck(binarized, pixelDataLen, i, j, width)
+                ){
+                    // this pixel should be erased
+                    binarizedCopy[(4 * width * i) + (4 * j)] = 255;
+                    binarizedCopy[(4 * width * i) + (4 * j) + 1] = 255;
+                    binarizedCopy[(4 * width * i) + (4 * j) + 2] = 255;
+                }
+            }
+        }
+     
+        for(int i = 0; i < pixelDataLen; i++){
+            imageData[i] = binarizedCopy[i];
+        }
+        
+        numIterations--;
+    }
+    
+    delete[] binarized;
+    delete[] binarizedCopy;
 }
