@@ -13,11 +13,18 @@ int correctRGB(int channel){
 }
 
 void setFilterState(Filter filterToSet, std::map<Filter, bool>& filters){
-    filters[filterToSet] = !filters[filterToSet];
     for(auto const& f : filters){
         if(f.first != filterToSet){
             filters[f.first] = false;
+        }else{
+            filters[f.first] = true;
         }
+    }
+}
+
+void clearFilterState(std::map<Filter, bool>& filters){
+    for(auto const& f : filters){
+        filters[f.first] = false;
     }
 }
 
