@@ -66,6 +66,14 @@ int main(int, char**)
     const int sdlHeight = 720;
     SDL_Window* window = SDL_CreateWindow("ImageEditor", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, sdlWidth, sdlHeight, window_flags);
     
+    // add window icon
+    std::string iconFile = "image_editor_icon.bmp";
+    SDL_Surface* icon =  SDL_LoadBMP(iconFile.c_str());
+    if(icon != NULL){
+        SDL_SetWindowIcon(window, icon);
+        SDL_FreeSurface(icon);
+    }
+    
     SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
     if(renderer == NULL){
         std::cout << "error creating renderer\n";
