@@ -753,11 +753,11 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
     }
     
     if(showImage){
-        // ROTATE IMAGE
+        // ROTATE IMAGE (only if not gif currently)
         if(!isGif && ImGui::Button("rotate image")){
             rotateImage(imageWidth, imageHeight);
         }
-        ImGui::SameLine();
+        if(!isGif) ImGui::SameLine();
         
         // RESET IMAGE
         if(ImGui::Button("reset image")){
@@ -843,11 +843,19 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
                     displayGifFrame(gifImage, gifFrames);
                 }
                 ImGui::SameLine();
+                
                 if(ImGui::Button("next frame")){
                     incrementGifFrameIndex(gifFrames, gifImage->ImageCount);
                     displayGifFrame(gifImage, gifFrames);
                 }
                 ImGui::SameLine();
+                
+                if(ImGui::Button("animate")){
+                    isAnimating = true;
+                    lastRender = SDL_GetTicks();
+                }
+                ImGui::SameLine();
+                
                 ImGui::Text((std::string("curr frame: ") + std::to_string(gifFrames.currFrameIndex)).c_str());
                 
                 SavedImage frame = gifImage->SavedImages[gifFrames.currFrameIndex];
@@ -858,10 +866,6 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
                     ImGui::Text((std::string("frame delay: ") + std::to_string(delay)).c_str());
                 }
                 
-                if(ImGui::Button("animate")){
-                    isAnimating = true;
-                    lastRender = SDL_GetTicks();
-                }
             }else{
                 // https://gist.github.com/jcredmond/9ef711b406e42a250daa3797ce96fd26
                 SavedImage frame = gifImage->SavedImages[gifFrames.currFrameIndex];
@@ -951,57 +955,28 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
         ImGui::Dummy(ImVec2(0.0f, 3.0f));
         
         // show filter options
-        // GRAYSCALE
-        if(ImGui::Button("grayscale")){
-            doFilter(imageWidth, imageHeight, Filter::Grayscale, filterParams, isGif, gifFrames);
-        }
-        ImGui::SameLine();
+        const char* filters[] = {
+            "grayscale",
+            "invert",
+            "saturate",
+            "outline",
+            "mosaic",
+            "channel offset",
+            "crt",
+            "voronoi",
+            "thinning"
+        };
+        static int curr_filter_idx = 0;
+        ImGui::ListBox("", &curr_filter_idx, filters, IM_ARRAYSIZE(filters), 4);
         
-        // INVERT
-        if(ImGui::Button("invert")){
-            doFilter(imageWidth, imageHeight, Filter::Invert, filterParams, isGif, gifFrames);
-        }
-        ImGui::SameLine();
-        
-        // SATURATION
-        if(ImGui::Button("saturate")){
-            setFilter(Filter::Saturation, filtersWithParams, imageWidth, imageHeight);
-        }
-        ImGui::SameLine();
-        
-        // OUTLINE
-        if(ImGui::Button("outline")){
-            setFilter(Filter::Outline, filtersWithParams, imageWidth, imageHeight);
-        }
-        ImGui::SameLine();
-        
-        // CHANNEL OFFSET
-        if(ImGui::Button("channel offset")){
-            setFilter(Filter::ChannelOffset, filtersWithParams, imageWidth, imageHeight);
-        }
-        ImGui::SameLine();
-        
-        // MOSAIC
-        if(ImGui::Button("mosaic")){
-            setFilter(Filter::Mosaic, filtersWithParams, imageWidth, imageHeight);
-        }
-        ImGui::SameLine();
-        
-        // CRT
-        if(ImGui::Button("crt")){
-            setFilter(Filter::Crt, filtersWithParams, imageWidth, imageHeight);
-        }
-        ImGui::SameLine();
-        
-        // Voronoi
-        if(ImGui::Button("voronoi")){
-            setFilter(Filter::Voronoi, filtersWithParams, imageWidth, imageHeight);
-        }
-        ImGui::SameLine();
-        
-        // Thinning
-        if(ImGui::Button("thinning")){
-            setFilter(Filter::Thinning, filtersWithParams, imageWidth, imageHeight);
+        if(ImGui::Button("select filter")){
+            Filter selectedFilter = static_cast<Filter>(curr_filter_idx);
+            if(filtersWithParams.find(selectedFilter) != filtersWithParams.end()){
+                setFilter(selectedFilter, filtersWithParams, imageWidth, imageHeight);
+            }else{
+                clearFilterState(filtersWithParams);
+                doFilter(imageWidth, imageHeight, selectedFilter, filterParams, isGif, gifFrames);
+            }
         }
         ImGui::SameLine();
         

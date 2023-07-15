@@ -55,6 +55,7 @@ enum Filter {
 
 int correctRGB(int channel);
 void setFilterState(Filter filterToSet, std::map<Filter, bool>& filters);
+void clearFilterState(std::map<Filter, bool>& filters);
 void grayscale(unsigned char* pixelData, int pixelDataLen);
 void saturate(unsigned char* pixelData, int pixelDataLen, FilterParameters& params);
 void outline(unsigned char* pixelData, unsigned char* sourceImageCopy, int imageWidth, int imageHeight, FilterParameters& params);
