@@ -8,6 +8,7 @@
 #include <map>
 #include <sstream>
 #include <string>
+#include <SDL.h>
 #include <vector>
 
 #include "external/giflib/gif_lib.h"
@@ -190,6 +191,39 @@ void resetImageState(int& imageWidth, int& imageHeight, int originalWidth, int o
 void setFilter(Filter filter, std::map<Filter, bool>& filtersWithParams, int imageWidth, int imageHeight){
     setFilterState(filter, filtersWithParams);
     updateTempImageState(imageWidth, imageHeight);
+}
+
+// trying something like https://github.com/syncopika/funSketch/blob/master/src/filters/dots.js
+// https://discourse.libsdl.org/t/draw-sprites-off-screen/26747/4
+// https://discourse.libsdl.org/t/i-have-rendered-using-sdl-renderdrawpoint-my-figure-keeps-redrawing-itself-i-want-it-to-stop-refreshing/33283/6
+void test(unsigned char* pixelData, int pixelDataLen, int imageWidth, int imageHeight, SDL_Renderer* renderer){
+    SDL_Texture* target = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, imageWidth, imageHeight);
+    
+    SDL_SetRenderTarget(renderer, target);
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+	SDL_RenderClear(renderer);
+    
+    for(int row = 0; row < imageHeight - 2; row += 2){
+        for(int col = 0; col < imageWidth - 2; col += 2){
+            int r = (int)pixelData[(4 * row * imageWidth) + (4 * col)];
+            int g = (int)pixelData[(4 * row * imageWidth) + (4 * col)+1];
+            int b = (int)pixelData[(4 * row * imageWidth) + (4 * col)+2];
+            
+            SDL_SetRenderDrawColor(renderer, r, g, b, 255);
+            SDL_RenderDrawPoint(renderer, row, col);
+        }
+    }
+    
+    SDL_Rect rect;
+    rect.x = 0;
+    rect.y = 0;
+    rect.w = imageWidth;
+    rect.h = imageHeight;
+    
+    SDL_RenderReadPixels(renderer, &rect, SDL_PIXELFORMAT_RGBA32, pixelData, 4 * imageWidth); // using SDL_PIXELFORMAT_RGBA8888 changes up the colors :)
+    
+    SDL_DestroyTexture(target);
+    SDL_SetRenderTarget(renderer, nullptr);
 }
 
 void doFilter(int imageWidth, int imageHeight, Filter filter, FilterParameters& filterParams, bool isGif, ReconstructedGifFrames& gifFrames){
@@ -614,7 +648,7 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
     static bool isGif = false;
     static bool isAPNG = false; // is animated PNG
     static bool isAnimating = false; // for gifs and apngs
-    static Uint32 lastRender;
+    static Uint32 lastRender;        // for animating
     static int imageHeight = 0;
     static int imageWidth = 0;
     static int originalImageHeight = 0;
@@ -949,6 +983,21 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
         ImGui::SameLine();
         if(ImGui::Button("swap colors")){
             swapColors(colorToChange, colorToChangeTo, imageWidth, imageHeight);
+        }
+        
+        // spacer
+        ImGui::Dummy(ImVec2(0.0f, 3.0f));
+        
+        if(ImGui::Button("test")){
+            int pixelDataLen = imageWidth * imageHeight * 4; // 4 because rgba
+            unsigned char* pixelData = new unsigned char[pixelDataLen];
+    
+            glActiveTexture(IMAGE_DISPLAY);
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            test(pixelData, pixelDataLen, imageWidth, imageHeight, renderer);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            
+            delete[] pixelData;
         }
         
         // spacer
