@@ -5,6 +5,7 @@
 #include <map>
 #include <utility>
 #include <vector>
+#include <SDL.h>
 #include <stdint.h> // for uint8_t
 #include <stdlib.h> // for rand()
 
@@ -44,13 +45,14 @@ struct FilterParameters {
 enum Filter {
     Grayscale,
     Invert,
+    Dots,
     Saturation,
     Outline,
     Mosaic,
     ChannelOffset,
     Crt,
     Voronoi,
-    Thinning
+    Thinning,
 };
 
 int correctRGB(int channel);
@@ -65,5 +67,6 @@ void channelOffset(unsigned char* imageData, unsigned char* sourceImageCopy, int
 void crt(unsigned char* imageData, unsigned char* sourceImageCopy, int imageWidth, int imageHeight, FilterParameters& params);
 void voronoi(unsigned char* imageData, int pixelDataLen, int width, int height, FilterParameters& params);
 void thinning(unsigned char* imageData, int pixelDataLen, int width, int height, FilterParameters& params);
+void dots(unsigned char* pixelData, int pixelDataLen, int imageWidth, int imageHeight, SDL_Renderer* renderer);
 
 #endif
