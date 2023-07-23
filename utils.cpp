@@ -8,6 +8,7 @@
 #include <map>
 #include <sstream>
 #include <string>
+#include <SDL.h>
 #include <vector>
 
 #include "external/giflib/gif_lib.h"
@@ -192,7 +193,15 @@ void setFilter(Filter filter, std::map<Filter, bool>& filtersWithParams, int ima
     updateTempImageState(imageWidth, imageHeight);
 }
 
-void doFilter(int imageWidth, int imageHeight, Filter filter, FilterParameters& filterParams, bool isGif, ReconstructedGifFrames& gifFrames){
+void doFilter(
+    int imageWidth,
+    int imageHeight,
+    Filter filter,
+    FilterParameters& filterParams,
+    bool isGif,
+    ReconstructedGifFrames& gifFrames,
+    SDL_Renderer* renderer
+){
     int pixelDataLen = imageWidth * imageHeight * 4; // 4 because rgba
     unsigned char* pixelData = new unsigned char[pixelDataLen];
             
@@ -208,6 +217,12 @@ void doFilter(int imageWidth, int imageHeight, Filter filter, FilterParameters& 
             glActiveTexture(IMAGE_DISPLAY);
             glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
             invert(pixelData, pixelDataLen);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            break;
+        case Filter::Dots:
+            glActiveTexture(IMAGE_DISPLAY);
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            dots(pixelData, pixelDataLen, imageWidth, imageHeight, renderer);
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
             break;
         case Filter::Saturation:
@@ -614,7 +629,7 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
     static bool isGif = false;
     static bool isAPNG = false; // is animated PNG
     static bool isAnimating = false; // for gifs and apngs
-    static Uint32 lastRender;
+    static Uint32 lastRender;        // for animating
     static int imageHeight = 0;
     static int imageWidth = 0;
     static int originalImageHeight = 0;
@@ -958,6 +973,7 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
         const char* filters[] = {
             "grayscale",
             "invert",
+            "dots",
             "saturate",
             "outline",
             "mosaic",
@@ -972,14 +988,18 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
         if(ImGui::Button("select filter")){
             Filter selectedFilter = static_cast<Filter>(curr_filter_idx);
             if(filtersWithParams.find(selectedFilter) != filtersWithParams.end()){
+                // if user selected a filter with parameters
                 setFilter(selectedFilter, filtersWithParams, imageWidth, imageHeight);
             }else{
                 clearFilterState(filtersWithParams);
-                doFilter(imageWidth, imageHeight, selectedFilter, filterParams, isGif, gifFrames);
+
+                // probably not the best way to do this but note that renderer is passed here just for the "dots" filter FYI
+                doFilter(imageWidth, imageHeight, selectedFilter, filterParams, isGif, gifFrames, renderer);
             }
         }
         ImGui::SameLine();
         
+        // show any parameters associated with current selected filter
         if(filtersWithParams[Filter::Saturation]){
             ImGui::Text("saturation filter parameters");
             

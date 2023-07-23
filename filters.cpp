@@ -309,3 +309,57 @@ void thinning(unsigned char* imageData, int pixelDataLen, int width, int height,
     delete[] binarized;
     delete[] binarizedCopy;
 }
+
+// trying something like https://github.com/syncopika/funSketch/blob/master/src/filters/dots.js
+// https://discourse.libsdl.org/t/draw-sprites-off-screen/26747/4
+// https://discourse.libsdl.org/t/i-have-rendered-using-sdl-renderdrawpoint-my-figure-keeps-redrawing-itself-i-want-it-to-stop-refreshing/33283/6
+void dots(unsigned char* pixelData, int pixelDataLen, int imageWidth, int imageHeight, SDL_Renderer* renderer){
+    SDL_Texture* target = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_TARGET, imageWidth, imageHeight);
+    
+    SDL_SetRenderTarget(renderer, target);
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+	SDL_RenderClear(renderer);
+    
+    int space = 3;
+    
+    for(int row = 0; row < imageHeight - space; row += space){
+        for(int col = 0; col < imageWidth - space; col += space){
+            int r = (int)pixelData[(4 * row * imageWidth) + (4 * col)];
+            int g = (int)pixelData[(4 * row * imageWidth) + (4 * col) + 1];
+            int b = (int)pixelData[(4 * row * imageWidth) + (4 * col) + 2];
+            
+            SDL_SetRenderDrawColor(renderer, r, g, b, 255);
+            SDL_RenderDrawPoint(renderer, col, row); // would be nice to be able to specify point width but not sure there's an easy way
+            
+            // try adding left, right, top and bottom as well for a larger "dot"
+            int left = (4 * row * imageWidth) + (4 * (col - 1));
+            int right = (4 * row * imageWidth) + (4 * (col + 1));
+            int top = (4 * (row - 1) * imageWidth) + (4 * col);
+            int bottom = (4 * (row + 1) * imageWidth) + (4 * col);
+            
+            if(left >= 0 && left < pixelDataLen){
+                SDL_RenderDrawPoint(renderer, col-1, row);
+            }
+            if(right >= 0 && right < pixelDataLen){
+                SDL_RenderDrawPoint(renderer, col+1, row);
+            }
+            if(top >= 0 && top < pixelDataLen){
+                SDL_RenderDrawPoint(renderer, col, row-1);
+            }
+            if(bottom >= 0 && bottom < pixelDataLen){
+                SDL_RenderDrawPoint(renderer, col, row+1);
+            }
+        }
+    }
+    
+    SDL_Rect rect;
+    rect.x = 0;
+    rect.y = 0;
+    rect.w = imageWidth;
+    rect.h = imageHeight;
+    
+    SDL_RenderReadPixels(renderer, &rect, SDL_PIXELFORMAT_RGBA32, pixelData, 4 * imageWidth); // using SDL_PIXELFORMAT_RGBA8888 changes up the colors :)
+    
+    SDL_DestroyTexture(target);
+    SDL_SetRenderTarget(renderer, nullptr);
+}

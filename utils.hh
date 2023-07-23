@@ -91,6 +91,14 @@ void incrementGifFrameIndex(ReconstructedGifFrames& gifFrames, int totalNumFrame
 int extractFrameDelay(SavedImage& frame);
 
 void setFilter(Filter filter, std::map<Filter, bool>& filtersWithParams,  int imageWidth, int imageHeight);
-void doFilter(int imageWidth, int imageHeight, Filter filter, FilterParameters& filterParams, bool isGif, ReconstructedGifFrames& gifFrames);
+void doFilter(
+    int imageWidth,
+    int imageHeight,
+    Filter filter,
+    FilterParameters& filterParams,
+    bool isGif,
+    ReconstructedGifFrames& gifFrames,
+    SDL_Renderer* renderer=nullptr
+);
 
 #endif
