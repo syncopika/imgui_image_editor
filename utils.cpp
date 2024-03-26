@@ -606,6 +606,18 @@ int extractFrameDelay(SavedImage& frame){
     return -1;
 }
 
+void setFrameDelay(SavedImage& frame, int newDelay){
+    std::cout << "setting new delay: " << newDelay << '\n';
+    for(int i = 0; i < frame.ExtensionBlockCount; i++){
+        if(frame.ExtensionBlocks[i].ByteCount == 4){
+            std::cout << "found blocks\n";
+            // https://github.com/grimfang4/SDL_gifwrap/blob/master/SDL_gifwrap.c#L216
+            frame.ExtensionBlocks[i].Bytes[1] = (newDelay / 10) % 256;
+            frame.ExtensionBlocks[i].Bytes[2] = (double)(newDelay / 10) / 256.0;
+        }
+    }
+}
+
 void getExportedFileName(std::string& specifiedExportName, std::string& currFile, const char* extension){
     // if no name for the exported file is specified, use the imported file filepath to extract the filename
     if(specifiedExportName == ""){
@@ -635,6 +647,7 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
     static int originalImageHeight = 0;
     static int originalImageWidth = 0;
     static int imageChannels = 4; //rgba
+    static int newGifFrameDelay = 120;
     static char importImageFilepath[FILEPATH_MAX_LENGTH] = "test_image.png";
     static char exportImageName[FILEPATH_MAX_LENGTH] = "";
     static std::string exportNameMsg;
@@ -878,7 +891,16 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
                 int delay = extractFrameDelay(frame);
                 if(delay > -1){
                     ImGui::SameLine();
-                    ImGui::Text((std::string("frame delay: ") + std::to_string(delay)).c_str());
+                    ImGui::Text((std::string("curr frame delay: ") + std::to_string(delay)).c_str());
+                    ImGui::SameLine();
+                    ImGui::PushItemWidth(80);
+                    ImGui::InputInt("", &newGifFrameDelay);
+                    ImGui::PopItemWidth();
+                    ImGui::SameLine();
+                    if(ImGui::Button("set new delay")){
+                        setFrameDelay(frame, newGifFrameDelay);
+                    }
+                    //ImGui::Text(std::to_string(delay));
                 }
                 
             }else{
@@ -923,14 +945,14 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
                 ImGui::Text((std::string("frame delay: ") + std::to_string(currFrameDelayMs)).c_str());
                 
                 // TODO: make this info collapsible if possible?
-				ImGui::Text((std::string("width      :") + std::to_string(frame->width)).c_str());
-				ImGui::Text((std::string("height     :") + std::to_string(frame->height)).c_str());
-				ImGui::Text((std::string("x_offset   :") + std::to_string(frame->x_offset)).c_str());
-				ImGui::Text((std::string("y_offset   :") + std::to_string(frame->y_offset)).c_str());
-				ImGui::Text((std::string("delay_num  :") + std::to_string(frame->delay_num)).c_str());
-				ImGui::Text((std::string("delay_den  :") + std::to_string(frame->delay_den)).c_str());
-				ImGui::Text((std::string("dispose_op :") + std::to_string(frame->dispose_op)).c_str());
-				ImGui::Text((std::string("blend_op   :") + std::to_string(frame->blend_op)).c_str());
+                ImGui::Text((std::string("width      :") + std::to_string(frame->width)).c_str());
+                ImGui::Text((std::string("height     :") + std::to_string(frame->height)).c_str());
+                ImGui::Text((std::string("x_offset   :") + std::to_string(frame->x_offset)).c_str());
+                ImGui::Text((std::string("y_offset   :") + std::to_string(frame->y_offset)).c_str());
+                ImGui::Text((std::string("delay_num  :") + std::to_string(frame->delay_num)).c_str());
+                ImGui::Text((std::string("delay_den  :") + std::to_string(frame->delay_den)).c_str());
+                ImGui::Text((std::string("dispose_op :") + std::to_string(frame->dispose_op)).c_str());
+                ImGui::Text((std::string("blend_op   :") + std::to_string(frame->blend_op)).c_str());
                 
                 if(ImGui::Button("animate")){
                     isAnimating = true;

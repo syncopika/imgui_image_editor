@@ -89,6 +89,7 @@ void reconstructGifFrames(ReconstructedGifFrames& gifFrames, GifFileType* gifIma
 void decrementGifFrameIndex(ReconstructedGifFrames& gifFrames);
 void incrementGifFrameIndex(ReconstructedGifFrames& gifFrames, int totalNumFrames);
 int extractFrameDelay(SavedImage& frame);
+void setFrameDelay(SavedImage& frame, int newDelay);
 
 void setFilter(Filter filter, std::map<Filter, bool>& filtersWithParams,  int imageWidth, int imageHeight);
 void doFilter(
