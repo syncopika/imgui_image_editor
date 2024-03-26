@@ -607,10 +607,8 @@ int extractFrameDelay(SavedImage& frame){
 }
 
 void setFrameDelay(SavedImage& frame, int newDelay){
-    std::cout << "setting new delay: " << newDelay << '\n';
     for(int i = 0; i < frame.ExtensionBlockCount; i++){
         if(frame.ExtensionBlocks[i].ByteCount == 4){
-            std::cout << "found blocks\n";
             // https://github.com/grimfang4/SDL_gifwrap/blob/master/SDL_gifwrap.c#L216
             frame.ExtensionBlocks[i].Bytes[1] = (newDelay / 10) % 256;
             frame.ExtensionBlocks[i].Bytes[2] = (double)(newDelay / 10) / 256.0;
@@ -894,7 +892,7 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
                     ImGui::Text((std::string("curr frame delay: ") + std::to_string(delay)).c_str());
                     ImGui::SameLine();
                     ImGui::PushItemWidth(80);
-                    ImGui::InputInt("", &newGifFrameDelay);
+                    ImGui::InputInt("##frame delay", &newGifFrameDelay); // https://github.com/ocornut/imgui/issues/6984
                     ImGui::PopItemWidth();
                     ImGui::SameLine();
                     if(ImGui::Button("set new delay")){
@@ -1160,7 +1158,7 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
         }
         
         // signal that the image export happened in popup
-        if(ImGui::BeginPopupModal("message")){
+        if(ImGui::BeginPopupModal("message", NULL, ImGuiWindowFlags_AlwaysAutoResize)){
             ImGui::Text((std::string("exported image: ") + exportNameMsg).c_str()); // TODO: can the modal resize based on how much text there is?
             if(ImGui::Button("close")){
                 ImGui::CloseCurrentPopup();
