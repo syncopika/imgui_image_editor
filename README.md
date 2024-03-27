@@ -6,7 +6,7 @@ not much to see here right now, but it has a few filters and you can rotate the 
 ![screenshot of project](screenshots/screenshot.png)    
     
 can do some basic gif handling and editing of their frames :D. there's also some APNG support (mainly for viewing purposes atm) but it's not perfect (yet).    
-![screenshot of project - gif handling](screenshots/15-07-2023_112510.gif)    
+![screenshot of project - gif handling](screenshots/26-03-2024_200053.gif)    
     
     
 ### installation    
