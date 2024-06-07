@@ -41,8 +41,17 @@ LIBS = -mwindows -lmingw32 -lgdi32 $(GLEW_LIBS) -lopengl32 -limm32 -static-libst
 # object files needed
 OBJS = $(addsuffix .o, $(basename $(notdir $(SOURCES))))
 OBJS += $(addsuffix .o, $(basename $(notdir $(GIFLIB_SOURCE))))
+OBJS += resources.o
 
 EXE = image_editor
+
+all: $(EXE)
+	@echo Build complete for $(ECHO_MESSAGE)
+
+# compile the resource file with windres - this is for the app icon
+# to show up on the taskbar
+resources.o: resources.rc
+	windres resources.rc -o resources.o 
 
 # build main
 %.o:%.cpp %.hh
@@ -56,10 +65,7 @@ EXE = image_editor
 %.o:$(GIFLIB_DIR)/%.c
 	gcc -g -O2 -Wall -Wformat -std=c99 -c -o $@ $<
 
-all: $(EXE)
-	@echo Build complete for $(ECHO_MESSAGE)
-
-$(EXE): $(OBJS)
+$(EXE): $(OBJS) resources.o
 	$(CXX) -o $@ $^ $(LIBS)
 
 clean:
