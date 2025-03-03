@@ -12,6 +12,64 @@ int correctRGB(int channel){
     return channel;
 }
 
+bool isValidPixel(int row, int col, int width, int height){
+  return row < height && row >= 0 && col < width && col >= 0;
+}
+
+// https://github.com/ratkins/RGBConverter/blob/master/RGBConverter.cpp#L92
+std::vector<float> rgbToHsv(int r, int g, int b){
+  float rf = r / 255.0;
+  float gf = g / 255.0;
+  float bf = b / 255.0;
+  
+  float max = std::max(rf, std::max(gf, bf));
+  float min = std::min(rf, std::min(gf, bf));
+  float delta = max - min;
+  
+  float h = max;
+  float s = max;
+  float v = max;
+  
+  s = (max == 0) ? 0 : (delta / max);
+  
+  if(max == min){
+    h = 0;
+  }else{
+    if(max == rf){
+      h = (gf - bf) / delta + (gf < bf ? 6 : 0);
+    }else if(max == gf){
+      h = (bf - rf) / delta + 2;
+    }else{
+      h = (rf - gf) / delta + 4;
+    }
+    h /= 6;
+  }
+  
+  std::vector<float> result = {h, s, v};
+  
+  return result;
+}
+
+std::vector<int> getRgb(unsigned char* pixelData, int row, int col, int width, int height){
+  int idx = (4 * width * row) + (4 * col);
+  std::vector<int> rgb = {(int)pixelData[idx], (int)pixelData[idx+1], (int)pixelData[idx+2]};
+  return rgb;
+}
+
+float getStdDev(std::vector<float> vValues){
+  float sum = 0;
+  float total = 0;
+  int numVals = (int)vValues.size();
+  for(float v : vValues){
+    total += v;
+  }
+  float mean = total / numVals;
+  for(float v : vValues){
+    sum += std::pow(v - mean, 2);
+  }
+  return std::sqrt(sum / numVals);
+}
+
 void setFilterState(Filter filterToSet, std::map<Filter, bool>& filters){
     for(auto const& f : filters){
         if(f.first != filterToSet){
@@ -318,7 +376,7 @@ void dots(unsigned char* pixelData, int pixelDataLen, int imageWidth, int imageH
     
     SDL_SetRenderTarget(renderer, target);
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-	SDL_RenderClear(renderer);
+    SDL_RenderClear(renderer);
     
     int space = 3;
     
@@ -362,4 +420,112 @@ void dots(unsigned char* pixelData, int pixelDataLen, int imageWidth, int imageH
     
     SDL_DestroyTexture(target);
     SDL_SetRenderTarget(renderer, nullptr);
+}
+
+void kuwahara_helper(unsigned char* imageData, unsigned char* sourceImageCopy, int width, int height, int row, int col, FilterParameters& params){
+  int pixelIdx = (4 * width * row) + (4 * col);
+  // for this pixel:
+  // get 4 quadrants
+  // get std dev of each quad of the V value in HSV
+  // get quad with smallest std dev
+  // the curr pixel gets the avg of the quad
+  
+  int factor = 3; // TODO: make this a param
+  
+  // top left quad
+  std::vector<float> topLeftV;
+  std::vector<float> topLeftRgb = {0, 0, 0};
+  for(int i = row - factor; i < row; i++){
+    for(int j = col - factor; j < col; j++){
+      if(isValidPixel(i, j, width, height)){
+        std::vector<int> rgb = getRgb(sourceImageCopy, i, j, width, height);
+        std::vector<float> hsv = rgbToHsv(rgb[0], rgb[1], rgb[2]);
+        topLeftV.push_back(hsv[2]);
+        topLeftRgb[0] += (float)rgb[0];
+        topLeftRgb[1] += (float)rgb[1];
+        topLeftRgb[2] += (float)rgb[2];
+      }
+    }
+  }
+  float topLeftStdDev = getStdDev(topLeftV);
+  
+  // top right quad
+  std::vector<float> topRightV;
+  std::vector<float> topRightRgb = {0, 0, 0};
+  for(int i = row - factor; i < row; i++){
+    for(int j = col; j < (col + factor); j++){
+      if(isValidPixel(i, j, width, height)){
+        std::vector<int> rgb = getRgb(sourceImageCopy, i, j, width, height);
+        std::vector<float> hsv = rgbToHsv(rgb[0], rgb[1], rgb[2]);
+        topRightV.push_back(hsv[2]);
+        topRightRgb[0] += (float)rgb[0];
+        topRightRgb[1] += (float)rgb[1];
+        topRightRgb[2] += (float)rgb[2];
+      }
+    }
+  }
+  float topRightStdDev = getStdDev(topRightV);
+  
+  // bottom left quad
+  std::vector<float> bottomLeftV;
+  std::vector<float> bottomLeftRgb = {0, 0, 0};
+  for(int i = row; i < row + factor; i++){
+    for(int j = col - factor; j < col; j++){
+      if(isValidPixel(i, j, width, height)){
+        std::vector<int> rgb = getRgb(sourceImageCopy, i, j, width, height);
+        std::vector<float> hsv = rgbToHsv(rgb[0], rgb[1], rgb[2]);
+        bottomLeftV.push_back(hsv[2]);
+        bottomLeftRgb[0] += (float)rgb[0];
+        bottomLeftRgb[1] += (float)rgb[1];
+        bottomLeftRgb[2] += (float)rgb[2];
+      }
+    }
+  }
+  float bottomLeftStdDev = getStdDev(bottomLeftV);
+  
+  // bottom right quad
+  std::vector<float> bottomRightV;
+  std::vector<float> bottomRightRgb = {0, 0, 0};
+  for(int i = row; i > 0 && i < height && i < row + factor; i++){
+    for(int j = col; j > 0 && j < (col + factor); j++){
+      if(isValidPixel(i, j, width, height)){
+        std::vector<int> rgb = getRgb(sourceImageCopy, i, j, width, height);
+        std::vector<float> hsv = rgbToHsv(rgb[0], rgb[1], rgb[2]);
+        bottomRightV.push_back(hsv[2]);
+        bottomRightRgb[0] += (float)rgb[0];
+        bottomRightRgb[1] += (float)rgb[1];
+        bottomRightRgb[2] += (float)rgb[2];
+      }
+    }
+  }
+  float bottomRightStdDev = getStdDev(bottomRightV);
+  
+  // assign avg color of smallest std dev quadrant
+  float minStdDev = std::min(topLeftStdDev, std::min(topRightStdDev, std::min(bottomRightStdDev, bottomLeftStdDev)));
+  if(minStdDev == topLeftStdDev){
+    imageData[pixelIdx] =     (unsigned char)(topLeftRgb[0] / (float)topLeftV.size());
+    imageData[pixelIdx + 1] = (unsigned char)(topLeftRgb[1] / (float)topLeftV.size());
+    imageData[pixelIdx + 2] = (unsigned char)(topLeftRgb[2] / (float)topLeftV.size());
+  }else if(minStdDev == topRightStdDev){
+    imageData[pixelIdx] =     (unsigned char)(topRightRgb[0] / (float)topRightV.size());
+    imageData[pixelIdx + 1] = (unsigned char)(topRightRgb[1] / (float)topRightV.size());
+    imageData[pixelIdx + 2] = (unsigned char)(topRightRgb[2] / (float)topRightV.size());
+  }else if(minStdDev == bottomLeftStdDev){
+    imageData[pixelIdx] =     (unsigned char)(bottomLeftRgb[0] / (float)bottomLeftV.size());
+    imageData[pixelIdx + 1] = (unsigned char)(bottomLeftRgb[1] / (float)bottomLeftV.size());
+    imageData[pixelIdx + 2] = (unsigned char)(bottomLeftRgb[2] / (float)bottomLeftV.size());
+  }else{
+    imageData[pixelIdx] =     (unsigned char)(bottomRightRgb[0] / (float)bottomRightV.size());
+    imageData[pixelIdx + 1] = (unsigned char)(bottomRightRgb[1] / (float)bottomRightV.size());
+    imageData[pixelIdx + 2] = (unsigned char)(bottomRightRgb[2] / (float)bottomRightV.size());
+  }
+}
+
+// https://github.com/syncopika/funSketch/blob/master/src/filters/kuwahara_painting.js
+void kuwahara(unsigned char* imageData, unsigned char* sourceImageCopy, int imageWidth, int imageHeight, FilterParameters& params){
+  for(int i = 0; i < imageHeight; i++){
+    for(int j = 0; j < imageWidth; j++){
+      kuwahara_helper(imageData, sourceImageCopy, imageWidth, imageHeight, i, j, params);
+    }
+  }
 }

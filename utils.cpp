@@ -292,6 +292,17 @@ void doFilter(
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
             break;
         }
+        case Filter::Kuwahara: {
+            unsigned char* sourceImageCopy = new unsigned char[pixelDataLen];
+            glActiveTexture(TEMP_IMAGE);
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, sourceImageCopy);
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            kuwahara(pixelData, sourceImageCopy, imageWidth, imageHeight, filterParams);
+            glActiveTexture(IMAGE_DISPLAY);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            delete[] sourceImageCopy;
+            break;
+        }
         default:
             break;
     }
@@ -660,7 +671,8 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
         {Filter::ChannelOffset, false},
         {Filter::Crt, false},
         {Filter::Voronoi, false},
-        {Filter::Thinning, false}
+        {Filter::Thinning, false},
+        //{Filter::Kuwahara, false} // TODO
     };
     
     bool importImageClicked = ImGui::Button("import image");
@@ -1000,7 +1012,8 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
             "channel offset",
             "crt",
             "voronoi",
-            "thinning"
+            "thinning",
+            "kuwahara"
         };
         static int curr_filter_idx = 0;
         ImGui::ListBox("", &curr_filter_idx, filters, IM_ARRAYSIZE(filters), 4);
