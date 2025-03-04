@@ -539,7 +539,7 @@ void kuwahara(unsigned char* imageData, unsigned char* sourceImageCopy, int imag
 ***/
 std::vector<int> generateGaussBoxes(float stdDev, int numBoxes){
   float wIdeal = std::sqrt((12 * stdDev * stdDev / numBoxes) + 1); // ideal averaging filter width
-  int wl = (int)std::floor(wIdeal);
+  int wl = std::floor(wIdeal);
   
   if(wl % 2 == 0){
     wl--;
@@ -548,7 +548,7 @@ std::vector<int> generateGaussBoxes(float stdDev, int numBoxes){
   int wu = wl + 2;
       
   float mIdeal = (12 * stdDev * stdDev - numBoxes * wl * wl - 4 * numBoxes * wl - 3 * numBoxes) / (-4 * wl - 4);
-  int m = (int)std::round(mIdeal);
+  int m = std::round(mIdeal);
       
   std::vector<int> sizes;
       
@@ -576,17 +576,17 @@ void boxBlurHorz(std::vector<int>& src, std::vector<int>& trgt, int width, int h
           
     for(int j = 0; j <= stdDev; j++){
       val += src[ri++] - fv;
-      trgt[ti++] = (int)std::round(val * iarr);
+      trgt[ti++] = std::round(val * iarr);
     }
           
     for(int j = stdDev + 1; j < width - stdDev; j++){
       val += src[ri++] - src[li++];
-      trgt[ti++] = (int)std::round(val * iarr);
+      trgt[ti++] = std::round(val * iarr);
     }
           
     for(int j = width - stdDev; j < width; j++){
       val += lv - src[li++];
-      trgt[ti++] = (int)std::round(val * iarr);
+      trgt[ti++] = std::round(val * iarr);
     }
   }
 }
@@ -608,14 +608,14 @@ void boxBlurTotal(std::vector<int>& src, std::vector<int>& trgt, int width, int 
           
     for(int j = 0; j <= stdDev; j++){
       val += src[ri] - fv;
-      trgt[ti] = (int)std::round(val * iarr);
+      trgt[ti] = std::round(val * iarr);
       ri += width;
       ti += width;
     }
           
     for(int j = stdDev + 1; j < height - stdDev; j++){
       val += src[ri] - src[li];
-      trgt[ti] = (int)std::round(val * iarr);
+      trgt[ti] = std::round(val * iarr);
       li += width;
       ri += width;
       ti += width;
@@ -623,7 +623,7 @@ void boxBlurTotal(std::vector<int>& src, std::vector<int>& trgt, int width, int 
           
     for(int j = height - stdDev; j < height; j++){
       val += lv - src[li];
-      trgt[ti] = (int)std::round(val * iarr);
+      trgt[ti] = std::round(val * iarr);
       li += width;
       ti += width;
     }
