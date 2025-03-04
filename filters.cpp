@@ -258,9 +258,9 @@ void mosaic(unsigned char* imageData, unsigned char* sourceImageCopy, int imageW
             // get the color of the first pixel in this chunk
             // multiply by 4 because 4 channels per pixel
             // multiply by width because all the image data is in a single array and a row is dependent on width
-            uint8_t r = sourceImageCopy[4*i+4*j*imageWidth];
-            uint8_t g = sourceImageCopy[4*i+4*j*imageWidth+1];
-            uint8_t b = sourceImageCopy[4*i+4*j*imageWidth+2];
+            uint8_t r = sourceImageCopy[4*i + 4*j*imageWidth];
+            uint8_t g = sourceImageCopy[4*i + 4*j*imageWidth + 1];
+            uint8_t b = sourceImageCopy[4*i + 4*j*imageWidth + 2];
             
             // based on the chunk dimensions, there might be partial chunks
             // for the last chunk in a row, if there's a partial chunk chunkWidth-wise,
@@ -272,9 +272,9 @@ void mosaic(unsigned char* imageData, unsigned char* sourceImageCopy, int imageW
             // now for all the other pixels in this chunk, set them to this color
             for(int k = i; k < endWidth; k++){
                 for(int l = j; l < endHeight; l++){
-                    imageData[4*k+4*l*imageWidth] = r;
-                    imageData[4*k+4*l*imageWidth+1] = g;
-                    imageData[4*k+4*l*imageWidth+2] = b;
+                    imageData[4*k + 4*l*imageWidth] = r;
+                    imageData[4*k + 4*l*imageWidth + 1] = g;
+                    imageData[4*k + 4*l*imageWidth + 2] = b;
                 }
             }
         }
@@ -422,6 +422,10 @@ void dots(unsigned char* pixelData, int pixelDataLen, int imageWidth, int imageH
     SDL_SetRenderTarget(renderer, nullptr);
 }
 
+/*** 
+  Kuwahara filter 
+  https://github.com/syncopika/funSketch/blob/master/src/filters/kuwahara_painting.js
+***/
 void kuwahara_helper(unsigned char* imageData, unsigned char* sourceImageCopy, int width, int height, int row, int col, FilterParameters& params){
   int pixelIdx = (4 * width * row) + (4 * col);
   // for this pixel:
@@ -521,11 +525,149 @@ void kuwahara_helper(unsigned char* imageData, unsigned char* sourceImageCopy, i
   }
 }
 
-// https://github.com/syncopika/funSketch/blob/master/src/filters/kuwahara_painting.js
 void kuwahara(unsigned char* imageData, unsigned char* sourceImageCopy, int imageWidth, int imageHeight, FilterParameters& params){
   for(int i = 0; i < imageHeight; i++){
     for(int j = 0; j < imageWidth; j++){
       kuwahara_helper(imageData, sourceImageCopy, imageWidth, imageHeight, i, j, params);
     }
+  }
+}
+
+/*** 
+  Gaussian blur filter 
+  https://github.com/syncopika/funSketch/blob/master/src/filters/blur.js
+***/
+std::vector<int> generateGaussBoxes(float stdDev, int numBoxes){
+  float wIdeal = std::sqrt((12 * stdDev * stdDev / numBoxes) + 1); // ideal averaging filter width
+  int wl = (int)std::floor(wIdeal);
+  
+  if(wl % 2 == 0){
+    wl--;
+  }
+      
+  int wu = wl + 2;
+      
+  float mIdeal = (12 * stdDev * stdDev - numBoxes * wl * wl - 4 * numBoxes * wl - 3 * numBoxes) / (-4 * wl - 4);
+  int m = (int)std::round(mIdeal);
+      
+  std::vector<int> sizes;
+      
+  for(int i = 0; i < numBoxes; i++){
+    sizes.push_back(i < m ? wl : wu);
+  }
+      
+  return sizes;
+}
+
+void boxBlurHorz(std::vector<int>& src, std::vector<int>& trgt, int width, int height, float stdDev){
+  float iarr = 1.0 / (stdDev + stdDev + 1.0);
+  for(int i = 0; i < height; i++){
+    int ti = i * width;
+    int li = ti;
+    int ri = ti + stdDev;
+          
+    int fv = src[ti];
+    int lv = src[ti + width - 1];
+    float val = (stdDev + 1) * fv;
+    
+    for(int j = 0; j < stdDev; j++){
+      val += src[ti + j];
+    }
+          
+    for(int j = 0; j <= stdDev; j++){
+      val += src[ri++] - fv;
+      trgt[ti++] = (int)std::round(val * iarr);
+    }
+          
+    for(int j = stdDev + 1; j < width - stdDev; j++){
+      val += src[ri++] - src[li++];
+      trgt[ti++] = (int)std::round(val * iarr);
+    }
+          
+    for(int j = width - stdDev; j < width; j++){
+      val += lv - src[li++];
+      trgt[ti++] = (int)std::round(val * iarr);
+    }
+  }
+}
+
+void boxBlurTotal(std::vector<int>& src, std::vector<int>& trgt, int width, int height, float stdDev){
+  float iarr = 1.0 / (stdDev + stdDev + 1.0);
+  for(int i = 0; i < width; i++){
+    int ti = i;
+    int li = ti;
+    int ri = ti + stdDev * width;
+          
+    int fv = src[ti];
+    int lv = src[ti + width * (height - 1)];
+    float val = (stdDev + 1) * fv;
+          
+    for(int j = 0; j < stdDev; j++){
+      val += src[ti + j * width];
+    }
+          
+    for(int j = 0; j <= stdDev; j++){
+      val += src[ri] - fv;
+      trgt[ti] = (int)std::round(val * iarr);
+      ri += width;
+      ti += width;
+    }
+          
+    for(int j = stdDev + 1; j < height - stdDev; j++){
+      val += src[ri] - src[li];
+      trgt[ti] = (int)std::round(val * iarr);
+      li += width;
+      ri += width;
+      ti += width;
+    }
+          
+    for(int j = height - stdDev; j < height; j++){
+      val += lv - src[li];
+      trgt[ti] = (int)std::round(val * iarr);
+      li += width;
+      ti += width;
+    }
+  }
+}
+
+void boxBlur(std::vector<int>& src, std::vector<int>& trgt, int width, int height, float stdDev){
+  for(int i = 0; i < (int)src.size(); i++){
+    trgt[i] = src[i];
+  }
+  boxBlurHorz(trgt, src, width, height, stdDev);
+  boxBlurTotal(src, trgt, width, height, stdDev);
+}
+
+void gaussBlur(std::vector<int>& src, std::vector<int>& trgt, int width, int height, float stdDev){
+  std::vector<int> boxes = generateGaussBoxes(stdDev, 3);
+  boxBlur(src, trgt, width, height, (boxes[0] - 1.0) / 2.0);
+  boxBlur(trgt, src, width, height, (boxes[1] - 1.0) / 2.0);
+  boxBlur(src, trgt, width, height, (boxes[2] - 1.0) / 2.0);
+}
+
+void blur(unsigned char* imageData, int imageWidth, int imageHeight, FilterParameters& params){
+  int dataLength = 4 * imageWidth * imageHeight;
+  int numPixels = imageWidth * imageHeight;
+  
+  std::vector<int> redChannel(numPixels);
+  std::vector<int> greenChannel(numPixels);
+  std::vector<int> blueChannel(numPixels);
+  
+  for(int i = 0; i <= dataLength - 4; i += 4){
+    redChannel[i/4] = (int)imageData[i];
+    greenChannel[i/4] = (int)imageData[i + 1];
+    blueChannel[i/4] = (int)imageData[i + 2];
+  }
+  
+  float blurFactor = 3; // TODO: make this a param (also maybe don't make it a float)
+  
+  gaussBlur(redChannel, redChannel, imageWidth, imageHeight, blurFactor);
+  gaussBlur(greenChannel, greenChannel, imageWidth, imageHeight, blurFactor);
+  gaussBlur(blueChannel, blueChannel, imageWidth, imageHeight, blurFactor);
+  
+  for(int i = 0; i <= dataLength - 4; i += 4){
+    imageData[i] = (unsigned char)redChannel[i/4];
+    imageData[i + 1] = (unsigned char)greenChannel[i/4];
+    imageData[i + 2] = (unsigned char)blueChannel[i/4];
   }
 }

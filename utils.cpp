@@ -303,6 +303,14 @@ void doFilter(
             delete[] sourceImageCopy;
             break;
         }
+        case Filter::Blur: {
+            glActiveTexture(TEMP_IMAGE);
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            blur(pixelData, imageWidth, imageHeight, filterParams);
+            glActiveTexture(IMAGE_DISPLAY);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            break;
+        }
         default:
             break;
     }
@@ -673,6 +681,7 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
         {Filter::Voronoi, false},
         {Filter::Thinning, false},
         //{Filter::Kuwahara, false} // TODO
+        //{Filter::Blur, false} // TODO
     };
     
     bool importImageClicked = ImGui::Button("import image");
@@ -1013,7 +1022,8 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
             "crt",
             "voronoi",
             "thinning",
-            "kuwahara"
+            "kuwahara",
+            "blur"
         };
         static int curr_filter_idx = 0;
         ImGui::ListBox("", &curr_filter_idx, filters, IM_ARRAYSIZE(filters), 4);

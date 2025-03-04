@@ -54,6 +54,7 @@ enum Filter {
     Voronoi,
     Thinning,
     Kuwahara,
+    Blur,
 };
 
 int correctRGB(int channel);
@@ -74,7 +75,17 @@ void crt(unsigned char* imageData, unsigned char* sourceImageCopy, int imageWidt
 void voronoi(unsigned char* imageData, int pixelDataLen, int width, int height, FilterParameters& params);
 void thinning(unsigned char* imageData, int pixelDataLen, int width, int height, FilterParameters& params);
 void dots(unsigned char* pixelData, int pixelDataLen, int imageWidth, int imageHeight, SDL_Renderer* renderer);
+
+// kuwahara filter
 void kuwahara_helper(unsigned char* imageData, unsigned char* sourceImageCopy, int width, int height, int row, int col, FilterParameters& params);
 void kuwahara(unsigned char* imageData, unsigned char* sourceImageCopy, int imageWidth, int imageHeight, FilterParameters& params);
+
+// Gaussian blur filter
+std::vector<int> generateGaussBoxes(float stdDev, int numBoxes);
+void boxBlurHorz(std::vector<int>& src, std::vector<int>& trgt, int width, int height, float stdDev);
+void boxBlurTotal(std::vector<int>& src, std::vector<int>& trgt, int width, int height, float stdDev);
+void boxBlur(std::vector<int>& src, std::vector<int>& trgt, int width, int height, float stdDev);
+void gaussBlur(std::vector<int>& src, std::vector<int>& trgt, int width, int height, float stdDev);
+void blur(unsigned char* imageData, int imageWidth, int imageHeight, FilterParameters& params);
 
 #endif
