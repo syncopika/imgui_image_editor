@@ -53,11 +53,19 @@ enum Filter {
     Crt,
     Voronoi,
     Thinning,
+    Kuwahara,
+    Blur,
+    EdgeDetection,
 };
 
 int correctRGB(int channel);
+bool isValidPixel(int row, int col, int width, int height);
+std::vector<float> rgbToHsv(int r, int g, int b);
+std::vector<int> getRgb(unsigned char* pixelData, int row, int col, int width, int height);
+
 void setFilterState(Filter filterToSet, std::map<Filter, bool>& filters);
 void clearFilterState(std::map<Filter, bool>& filters);
+
 void grayscale(unsigned char* pixelData, int pixelDataLen);
 void saturate(unsigned char* pixelData, int pixelDataLen, FilterParameters& params);
 void outline(unsigned char* pixelData, unsigned char* sourceImageCopy, int imageWidth, int imageHeight, FilterParameters& params);
@@ -68,5 +76,18 @@ void crt(unsigned char* imageData, unsigned char* sourceImageCopy, int imageWidt
 void voronoi(unsigned char* imageData, int pixelDataLen, int width, int height, FilterParameters& params);
 void thinning(unsigned char* imageData, int pixelDataLen, int width, int height, FilterParameters& params);
 void dots(unsigned char* pixelData, int pixelDataLen, int imageWidth, int imageHeight, SDL_Renderer* renderer);
+void edgeDetection(unsigned char* imageData, unsigned char* sourceImageCopy, int width, int height);
+
+// Kuwahara filter
+void kuwahara_helper(unsigned char* imageData, unsigned char* sourceImageCopy, int width, int height, int row, int col, FilterParameters& params);
+void kuwahara(unsigned char* imageData, unsigned char* sourceImageCopy, int imageWidth, int imageHeight, FilterParameters& params);
+
+// Gaussian blur filter
+std::vector<int> generateGaussBoxes(float stdDev, int numBoxes);
+void boxBlurHorz(std::vector<int>& src, std::vector<int>& trgt, int width, int height, float stdDev);
+void boxBlurTotal(std::vector<int>& src, std::vector<int>& trgt, int width, int height, float stdDev);
+void boxBlur(std::vector<int>& src, std::vector<int>& trgt, int width, int height, float stdDev);
+void gaussBlur(std::vector<int>& src, std::vector<int>& trgt, int width, int height, float stdDev);
+void blur(unsigned char* imageData, int imageWidth, int imageHeight, FilterParameters& params);
 
 #endif

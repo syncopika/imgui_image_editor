@@ -292,6 +292,36 @@ void doFilter(
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
             break;
         }
+        case Filter::Kuwahara: {
+            unsigned char* sourceImageCopy = new unsigned char[pixelDataLen];
+            glActiveTexture(IMAGE_DISPLAY); // TODO: change to TEMP_IMAGE if filter has configurable params
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, sourceImageCopy);
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            kuwahara(pixelData, sourceImageCopy, imageWidth, imageHeight, filterParams);
+            glActiveTexture(IMAGE_DISPLAY);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            delete[] sourceImageCopy;
+            break;
+        }
+        case Filter::Blur: {
+            glActiveTexture(IMAGE_DISPLAY); // TODO: change to TEMP_IMAGE if filter has configurable params
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            blur(pixelData, imageWidth, imageHeight, filterParams);
+            glActiveTexture(IMAGE_DISPLAY);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            break;
+        }
+        case Filter::EdgeDetection: {
+            unsigned char* sourceImageCopy = new unsigned char[pixelDataLen];
+            glActiveTexture(IMAGE_DISPLAY);
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, sourceImageCopy);
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            edgeDetection(pixelData, sourceImageCopy, imageWidth, imageHeight);
+            glActiveTexture(IMAGE_DISPLAY);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            delete[] sourceImageCopy;
+            break;
+        }
         default:
             break;
     }
@@ -660,7 +690,9 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
         {Filter::ChannelOffset, false},
         {Filter::Crt, false},
         {Filter::Voronoi, false},
-        {Filter::Thinning, false}
+        {Filter::Thinning, false},
+        //{Filter::Kuwahara, false} // TODO
+        //{Filter::Blur, false} // TODO
     };
     
     bool importImageClicked = ImGui::Button("import image");
@@ -1000,7 +1032,10 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
             "channel offset",
             "crt",
             "voronoi",
-            "thinning"
+            "thinning",
+            "kuwahara",
+            "blur",
+            "edge detection"
         };
         static int curr_filter_idx = 0;
         ImGui::ListBox("", &curr_filter_idx, filters, IM_ARRAYSIZE(filters), 4);

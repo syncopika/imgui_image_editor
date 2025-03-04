@@ -12,6 +12,64 @@ int correctRGB(int channel){
     return channel;
 }
 
+bool isValidPixel(int row, int col, int width, int height){
+  return row < height && row >= 0 && col < width && col >= 0;
+}
+
+// https://github.com/ratkins/RGBConverter/blob/master/RGBConverter.cpp#L92
+std::vector<float> rgbToHsv(int r, int g, int b){
+  float rf = r / 255.0;
+  float gf = g / 255.0;
+  float bf = b / 255.0;
+  
+  float max = std::max(rf, std::max(gf, bf));
+  float min = std::min(rf, std::min(gf, bf));
+  float delta = max - min;
+  
+  float h = max;
+  float s = max;
+  float v = max;
+  
+  s = (max == 0) ? 0 : (delta / max);
+  
+  if(max == min){
+    h = 0;
+  }else{
+    if(max == rf){
+      h = (gf - bf) / delta + (gf < bf ? 6 : 0);
+    }else if(max == gf){
+      h = (bf - rf) / delta + 2;
+    }else{
+      h = (rf - gf) / delta + 4;
+    }
+    h /= 6;
+  }
+  
+  std::vector<float> result = {h, s, v};
+  
+  return result;
+}
+
+std::vector<int> getRgb(unsigned char* pixelData, int row, int col, int width, int height){
+  int idx = (4 * width * row) + (4 * col);
+  std::vector<int> rgb = {(int)pixelData[idx], (int)pixelData[idx+1], (int)pixelData[idx+2]};
+  return rgb;
+}
+
+float getStdDev(std::vector<float> vValues){
+  float sum = 0;
+  float total = 0;
+  int numVals = (int)vValues.size();
+  for(float v : vValues){
+    total += v;
+  }
+  float mean = total / numVals;
+  for(float v : vValues){
+    sum += std::pow(v - mean, 2);
+  }
+  return std::sqrt(sum / numVals);
+}
+
 void setFilterState(Filter filterToSet, std::map<Filter, bool>& filters){
     for(auto const& f : filters){
         if(f.first != filterToSet){
@@ -200,9 +258,9 @@ void mosaic(unsigned char* imageData, unsigned char* sourceImageCopy, int imageW
             // get the color of the first pixel in this chunk
             // multiply by 4 because 4 channels per pixel
             // multiply by width because all the image data is in a single array and a row is dependent on width
-            uint8_t r = sourceImageCopy[4*i+4*j*imageWidth];
-            uint8_t g = sourceImageCopy[4*i+4*j*imageWidth+1];
-            uint8_t b = sourceImageCopy[4*i+4*j*imageWidth+2];
+            uint8_t r = sourceImageCopy[4*i + 4*j*imageWidth];
+            uint8_t g = sourceImageCopy[4*i + 4*j*imageWidth + 1];
+            uint8_t b = sourceImageCopy[4*i + 4*j*imageWidth + 2];
             
             // based on the chunk dimensions, there might be partial chunks
             // for the last chunk in a row, if there's a partial chunk chunkWidth-wise,
@@ -214,9 +272,9 @@ void mosaic(unsigned char* imageData, unsigned char* sourceImageCopy, int imageW
             // now for all the other pixels in this chunk, set them to this color
             for(int k = i; k < endWidth; k++){
                 for(int l = j; l < endHeight; l++){
-                    imageData[4*k+4*l*imageWidth] = r;
-                    imageData[4*k+4*l*imageWidth+1] = g;
-                    imageData[4*k+4*l*imageWidth+2] = b;
+                    imageData[4*k + 4*l*imageWidth] = r;
+                    imageData[4*k + 4*l*imageWidth + 1] = g;
+                    imageData[4*k + 4*l*imageWidth + 2] = b;
                 }
             }
         }
@@ -318,7 +376,7 @@ void dots(unsigned char* pixelData, int pixelDataLen, int imageWidth, int imageH
     
     SDL_SetRenderTarget(renderer, target);
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-	SDL_RenderClear(renderer);
+    SDL_RenderClear(renderer);
     
     int space = 3;
     
@@ -363,3 +421,297 @@ void dots(unsigned char* pixelData, int pixelDataLen, int imageWidth, int imageH
     SDL_DestroyTexture(target);
     SDL_SetRenderTarget(renderer, nullptr);
 }
+
+/*** 
+  Kuwahara filter 
+  https://github.com/syncopika/funSketch/blob/master/src/filters/kuwahara_painting.js
+***/
+void kuwahara_helper(unsigned char* imageData, unsigned char* sourceImageCopy, int width, int height, int row, int col, FilterParameters& params){
+  int pixelIdx = (4 * width * row) + (4 * col);
+  // for this pixel:
+  // get 4 quadrants
+  // get std dev of each quad of the V value in HSV
+  // get quad with smallest std dev
+  // the curr pixel gets the avg of the quad
+  
+  int factor = 3; // TODO: make this a param
+  
+  // top left quad
+  std::vector<float> topLeftV;
+  std::vector<float> topLeftRgb = {0, 0, 0};
+  for(int i = row - factor; i < row; i++){
+    for(int j = col - factor; j < col; j++){
+      if(isValidPixel(i, j, width, height)){
+        std::vector<int> rgb = getRgb(sourceImageCopy, i, j, width, height);
+        std::vector<float> hsv = rgbToHsv(rgb[0], rgb[1], rgb[2]);
+        topLeftV.push_back(hsv[2]);
+        topLeftRgb[0] += (float)rgb[0];
+        topLeftRgb[1] += (float)rgb[1];
+        topLeftRgb[2] += (float)rgb[2];
+      }
+    }
+  }
+  float topLeftStdDev = getStdDev(topLeftV);
+  
+  // top right quad
+  std::vector<float> topRightV;
+  std::vector<float> topRightRgb = {0, 0, 0};
+  for(int i = row - factor; i < row; i++){
+    for(int j = col; j < (col + factor); j++){
+      if(isValidPixel(i, j, width, height)){
+        std::vector<int> rgb = getRgb(sourceImageCopy, i, j, width, height);
+        std::vector<float> hsv = rgbToHsv(rgb[0], rgb[1], rgb[2]);
+        topRightV.push_back(hsv[2]);
+        topRightRgb[0] += (float)rgb[0];
+        topRightRgb[1] += (float)rgb[1];
+        topRightRgb[2] += (float)rgb[2];
+      }
+    }
+  }
+  float topRightStdDev = getStdDev(topRightV);
+  
+  // bottom left quad
+  std::vector<float> bottomLeftV;
+  std::vector<float> bottomLeftRgb = {0, 0, 0};
+  for(int i = row; i < row + factor; i++){
+    for(int j = col - factor; j < col; j++){
+      if(isValidPixel(i, j, width, height)){
+        std::vector<int> rgb = getRgb(sourceImageCopy, i, j, width, height);
+        std::vector<float> hsv = rgbToHsv(rgb[0], rgb[1], rgb[2]);
+        bottomLeftV.push_back(hsv[2]);
+        bottomLeftRgb[0] += (float)rgb[0];
+        bottomLeftRgb[1] += (float)rgb[1];
+        bottomLeftRgb[2] += (float)rgb[2];
+      }
+    }
+  }
+  float bottomLeftStdDev = getStdDev(bottomLeftV);
+  
+  // bottom right quad
+  std::vector<float> bottomRightV;
+  std::vector<float> bottomRightRgb = {0, 0, 0};
+  for(int i = row; i > 0 && i < height && i < row + factor; i++){
+    for(int j = col; j > 0 && j < (col + factor); j++){
+      if(isValidPixel(i, j, width, height)){
+        std::vector<int> rgb = getRgb(sourceImageCopy, i, j, width, height);
+        std::vector<float> hsv = rgbToHsv(rgb[0], rgb[1], rgb[2]);
+        bottomRightV.push_back(hsv[2]);
+        bottomRightRgb[0] += (float)rgb[0];
+        bottomRightRgb[1] += (float)rgb[1];
+        bottomRightRgb[2] += (float)rgb[2];
+      }
+    }
+  }
+  float bottomRightStdDev = getStdDev(bottomRightV);
+  
+  // assign avg color of smallest std dev quadrant
+  float minStdDev = std::min(topLeftStdDev, std::min(topRightStdDev, std::min(bottomRightStdDev, bottomLeftStdDev)));
+  if(minStdDev == topLeftStdDev){
+    imageData[pixelIdx] =     (unsigned char)(topLeftRgb[0] / (float)topLeftV.size());
+    imageData[pixelIdx + 1] = (unsigned char)(topLeftRgb[1] / (float)topLeftV.size());
+    imageData[pixelIdx + 2] = (unsigned char)(topLeftRgb[2] / (float)topLeftV.size());
+  }else if(minStdDev == topRightStdDev){
+    imageData[pixelIdx] =     (unsigned char)(topRightRgb[0] / (float)topRightV.size());
+    imageData[pixelIdx + 1] = (unsigned char)(topRightRgb[1] / (float)topRightV.size());
+    imageData[pixelIdx + 2] = (unsigned char)(topRightRgb[2] / (float)topRightV.size());
+  }else if(minStdDev == bottomLeftStdDev){
+    imageData[pixelIdx] =     (unsigned char)(bottomLeftRgb[0] / (float)bottomLeftV.size());
+    imageData[pixelIdx + 1] = (unsigned char)(bottomLeftRgb[1] / (float)bottomLeftV.size());
+    imageData[pixelIdx + 2] = (unsigned char)(bottomLeftRgb[2] / (float)bottomLeftV.size());
+  }else{
+    imageData[pixelIdx] =     (unsigned char)(bottomRightRgb[0] / (float)bottomRightV.size());
+    imageData[pixelIdx + 1] = (unsigned char)(bottomRightRgb[1] / (float)bottomRightV.size());
+    imageData[pixelIdx + 2] = (unsigned char)(bottomRightRgb[2] / (float)bottomRightV.size());
+  }
+}
+
+void kuwahara(unsigned char* imageData, unsigned char* sourceImageCopy, int imageWidth, int imageHeight, FilterParameters& params){
+  for(int i = 0; i < imageHeight; i++){
+    for(int j = 0; j < imageWidth; j++){
+      kuwahara_helper(imageData, sourceImageCopy, imageWidth, imageHeight, i, j, params);
+    }
+  }
+}
+
+/*** 
+  Gaussian blur filter 
+  https://github.com/syncopika/funSketch/blob/master/src/filters/blur.js
+  
+  TODO: this filter is still buggy and I get weird color artifacts
+  could it be a numerical precision issue?
+***/
+std::vector<int> generateGaussBoxes(float stdDev, int numBoxes){
+  float wIdeal = std::sqrt((12 * stdDev * stdDev / numBoxes) + 1); // ideal averaging filter width
+  int wl = std::floor(wIdeal);
+  
+  if(wl % 2 == 0){
+    wl--;
+  }
+      
+  int wu = wl + 2;
+      
+  float mIdeal = (12 * stdDev * stdDev - numBoxes * wl * wl - 4 * numBoxes * wl - 3 * numBoxes) / (-4 * wl - 4);
+  int m = std::round(mIdeal);
+      
+  std::vector<int> sizes;
+      
+  for(int i = 0; i < numBoxes; i++){
+    sizes.push_back(i < m ? wl : wu);
+  }
+      
+  return sizes;
+}
+
+void boxBlurHorz(std::vector<int>& src, std::vector<int>& trgt, int width, int height, float stdDev){
+  float iarr = 1.0 / (stdDev + stdDev + 1.0);
+  for(int i = 0; i < height; i++){
+    int ti = i * width;
+    int li = ti;
+    int ri = ti + stdDev;
+          
+    int fv = src[ti];
+    int lv = src[ti + width - 1];
+    float val = (stdDev + 1) * fv;
+    
+    for(int j = 0; j < stdDev; j++){
+      val += src[ti + j];
+    }
+          
+    for(int j = 0; j <= stdDev; j++){
+      val += src[ri++] - fv;
+      trgt[ti++] = std::round(val * iarr);
+    }
+          
+    for(int j = stdDev + 1; j < width - stdDev; j++){
+      val += src[ri++] - src[li++];
+      trgt[ti++] = std::round(val * iarr);
+    }
+          
+    for(int j = width - stdDev; j < width; j++){
+      val += lv - src[li++];
+      trgt[ti++] = std::round(val * iarr);
+    }
+  }
+}
+
+void boxBlurTotal(std::vector<int>& src, std::vector<int>& trgt, int width, int height, float stdDev){
+  float iarr = 1.0 / (stdDev + stdDev + 1.0);
+  for(int i = 0; i < width; i++){
+    int ti = i;
+    int li = ti;
+    int ri = ti + stdDev * width;
+          
+    int fv = src[ti];
+    int lv = src[ti + width * (height - 1)];
+    float val = (stdDev + 1) * fv;
+          
+    for(int j = 0; j < stdDev; j++){
+      val += src[ti + j * width];
+    }
+          
+    for(int j = 0; j <= stdDev; j++){
+      val += src[ri] - fv;
+      trgt[ti] = std::round(val * iarr);
+      ri += width;
+      ti += width;
+    }
+          
+    for(int j = stdDev + 1; j < height - stdDev; j++){
+      val += src[ri] - src[li];
+      trgt[ti] = std::round(val * iarr);
+      li += width;
+      ri += width;
+      ti += width;
+    }
+          
+    for(int j = height - stdDev; j < height; j++){
+      val += lv - src[li];
+      trgt[ti] = std::round(val * iarr);
+      li += width;
+      ti += width;
+    }
+  }
+}
+
+void boxBlur(std::vector<int>& src, std::vector<int>& trgt, int width, int height, float stdDev){
+  for(int i = 0; i < (int)src.size(); i++){
+    trgt[i] = src[i];
+  }
+  boxBlurHorz(trgt, src, width, height, stdDev);
+  boxBlurTotal(src, trgt, width, height, stdDev);
+}
+
+void gaussBlur(std::vector<int>& src, std::vector<int>& trgt, int width, int height, float stdDev){
+  std::vector<int> boxes = generateGaussBoxes(stdDev, 3);
+  boxBlur(src, trgt, width, height, (boxes[0] - 1.0) / 2.0);
+  boxBlur(trgt, src, width, height, (boxes[1] - 1.0) / 2.0);
+  boxBlur(src, trgt, width, height, (boxes[2] - 1.0) / 2.0);
+}
+
+void blur(unsigned char* imageData, int imageWidth, int imageHeight, FilterParameters& params){
+  int dataLength = 4 * imageWidth * imageHeight;
+  int numPixels = imageWidth * imageHeight;
+  
+  std::vector<int> redChannel(numPixels);
+  std::vector<int> greenChannel(numPixels);
+  std::vector<int> blueChannel(numPixels);
+  
+  for(int i = 0; i <= dataLength - 4; i += 4){
+    redChannel[i/4] = (int)imageData[i];
+    greenChannel[i/4] = (int)imageData[i + 1];
+    blueChannel[i/4] = (int)imageData[i + 2];
+  }
+  
+  float blurFactor = 3; // TODO: make this a param (also maybe don't make it a float)
+  
+  gaussBlur(redChannel, redChannel, imageWidth, imageHeight, blurFactor);
+  gaussBlur(greenChannel, greenChannel, imageWidth, imageHeight, blurFactor);
+  gaussBlur(blueChannel, blueChannel, imageWidth, imageHeight, blurFactor);
+  
+  for(int i = 0; i <= dataLength - 4; i += 4){
+    imageData[i] = (unsigned char)redChannel[i/4];
+    imageData[i + 1] = (unsigned char)greenChannel[i/4];
+    imageData[i + 2] = (unsigned char)blueChannel[i/4];
+  }
+}
+
+/*** 
+  edge detection filter 
+  https://github.com/syncopika/funSketch/blob/master/src/filters/edgedetection.js
+***/
+void edgeDetection(unsigned char* imageData, unsigned char* sourceImageCopy, int width, int height){
+  int xKernel[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
+  int yKernel[3][3] = {{-1, -2, -1}, {0, 0, 0}, {1, 2, 1}};
+      
+  for(int i = 1; i < height - 1; i++){
+    for(int j = 4; j < 4 * width - 4; j += 4){
+      int left = (4 * i * width) + (j - 4);
+      int right = (4 * i * width) + (j + 4);
+      int top = (4 * (i - 1) * width) + j;
+      int bottom = (4 * (i + 1) * width) + j;
+      int topLeft = (4 * (i - 1) * width) + (j - 4);
+      int topRight = (4 * (i - 1) * width) + (j + 4);
+      int bottomLeft = (4 * (i + 1) * width) + (j - 4);
+      int bottomRight = (4 * (i + 1) * width) + (j + 4);
+      int center = (4 * width * i) + j;
+              
+      // use the xKernel to detect edges horizontally 
+      int pX = (xKernel[0][0] * sourceImageCopy[topLeft]) + (xKernel[0][1] * sourceImageCopy[top]) + (xKernel[0][2] * sourceImageCopy[topRight]) +
+                  (xKernel[1][0] * sourceImageCopy[left]) + (xKernel[1][1] * sourceImageCopy[center]) + (xKernel[1][2] * sourceImageCopy[right]) +
+                  (xKernel[2][0] * sourceImageCopy[bottomLeft]) + (xKernel[2][1] * sourceImageCopy[bottom]) + (xKernel[2][2] * sourceImageCopy[bottomRight]);
+                  
+      // use the yKernel to detect edges vertically 
+      int pY = (yKernel[0][0] * sourceImageCopy[topLeft]) + (yKernel[0][1] * sourceImageCopy[top]) + (yKernel[0][2] * sourceImageCopy[topRight]) +
+                  (yKernel[1][0] * sourceImageCopy[left]) + (yKernel[1][1] * sourceImageCopy[center]) + (yKernel[1][2] * sourceImageCopy[right]) +
+                  (yKernel[2][0] * sourceImageCopy[bottomLeft]) + (yKernel[2][1] * sourceImageCopy[bottom]) + (yKernel[2][2] * sourceImageCopy[bottomRight]);
+              
+      // finally set the current pixel to the new value based on the formula 
+      int newVal = (std::ceil(std::sqrt((pX * pX) + (pY * pY))));
+      imageData[center] = newVal;
+      imageData[center + 1] = newVal;
+      imageData[center + 2] = newVal;
+    }
+  }
+}
+
+
