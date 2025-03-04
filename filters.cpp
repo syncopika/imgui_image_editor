@@ -536,6 +536,9 @@ void kuwahara(unsigned char* imageData, unsigned char* sourceImageCopy, int imag
 /*** 
   Gaussian blur filter 
   https://github.com/syncopika/funSketch/blob/master/src/filters/blur.js
+  
+  TODO: this filter is still buggy and I get weird color artifacts
+  could it be a numerical precision issue?
 ***/
 std::vector<int> generateGaussBoxes(float stdDev, int numBoxes){
   float wIdeal = std::sqrt((12 * stdDev * stdDev / numBoxes) + 1); // ideal averaging filter width
@@ -671,3 +674,44 @@ void blur(unsigned char* imageData, int imageWidth, int imageHeight, FilterParam
     imageData[i + 2] = (unsigned char)blueChannel[i/4];
   }
 }
+
+/*** 
+  edge detection filter 
+  https://github.com/syncopika/funSketch/blob/master/src/filters/edgedetection.js
+***/
+void edgeDetection(unsigned char* imageData, unsigned char* sourceImageCopy, int width, int height){
+  int xKernel[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
+  int yKernel[3][3] = {{-1, -2, -1}, {0, 0, 0}, {1, 2, 1}};
+      
+  for(int i = 1; i < height - 1; i++){
+    for(int j = 4; j < 4 * width - 4; j += 4){
+      int left = (4 * i * width) + (j - 4);
+      int right = (4 * i * width) + (j + 4);
+      int top = (4 * (i - 1) * width) + j;
+      int bottom = (4 * (i + 1) * width) + j;
+      int topLeft = (4 * (i - 1) * width) + (j - 4);
+      int topRight = (4 * (i - 1) * width) + (j + 4);
+      int bottomLeft = (4 * (i + 1) * width) + (j - 4);
+      int bottomRight = (4 * (i + 1) * width) + (j + 4);
+      int center = (4 * width * i) + j;
+              
+      // use the xKernel to detect edges horizontally 
+      int pX = (xKernel[0][0] * sourceImageCopy[topLeft]) + (xKernel[0][1] * sourceImageCopy[top]) + (xKernel[0][2] * sourceImageCopy[topRight]) +
+                  (xKernel[1][0] * sourceImageCopy[left]) + (xKernel[1][1] * sourceImageCopy[center]) + (xKernel[1][2] * sourceImageCopy[right]) +
+                  (xKernel[2][0] * sourceImageCopy[bottomLeft]) + (xKernel[2][1] * sourceImageCopy[bottom]) + (xKernel[2][2] * sourceImageCopy[bottomRight]);
+                  
+      // use the yKernel to detect edges vertically 
+      int pY = (yKernel[0][0] * sourceImageCopy[topLeft]) + (yKernel[0][1] * sourceImageCopy[top]) + (yKernel[0][2] * sourceImageCopy[topRight]) +
+                  (yKernel[1][0] * sourceImageCopy[left]) + (yKernel[1][1] * sourceImageCopy[center]) + (yKernel[1][2] * sourceImageCopy[right]) +
+                  (yKernel[2][0] * sourceImageCopy[bottomLeft]) + (yKernel[2][1] * sourceImageCopy[bottom]) + (yKernel[2][2] * sourceImageCopy[bottomRight]);
+              
+      // finally set the current pixel to the new value based on the formula 
+      int newVal = (std::ceil(std::sqrt((pX * pX) + (pY * pY))));
+      imageData[center] = newVal;
+      imageData[center + 1] = newVal;
+      imageData[center + 2] = newVal;
+    }
+  }
+}
+
+

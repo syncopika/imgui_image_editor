@@ -294,7 +294,7 @@ void doFilter(
         }
         case Filter::Kuwahara: {
             unsigned char* sourceImageCopy = new unsigned char[pixelDataLen];
-            glActiveTexture(TEMP_IMAGE);
+            glActiveTexture(IMAGE_DISPLAY); // TODO: change to TEMP_IMAGE if filter has configurable params
             glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, sourceImageCopy);
             glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
             kuwahara(pixelData, sourceImageCopy, imageWidth, imageHeight, filterParams);
@@ -304,11 +304,22 @@ void doFilter(
             break;
         }
         case Filter::Blur: {
-            glActiveTexture(TEMP_IMAGE);
+            glActiveTexture(IMAGE_DISPLAY); // TODO: change to TEMP_IMAGE if filter has configurable params
             glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
             blur(pixelData, imageWidth, imageHeight, filterParams);
             glActiveTexture(IMAGE_DISPLAY);
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            break;
+        }
+        case Filter::EdgeDetection: {
+            unsigned char* sourceImageCopy = new unsigned char[pixelDataLen];
+            glActiveTexture(IMAGE_DISPLAY);
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, sourceImageCopy);
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            edgeDetection(pixelData, sourceImageCopy, imageWidth, imageHeight);
+            glActiveTexture(IMAGE_DISPLAY);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageWidth, imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixelData);
+            delete[] sourceImageCopy;
             break;
         }
         default:
@@ -1023,7 +1034,8 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
             "voronoi",
             "thinning",
             "kuwahara",
-            "blur"
+            "blur",
+            "edge detection"
         };
         static int curr_filter_idx = 0;
         ImGui::ListBox("", &curr_filter_idx, filters, IM_ARRAYSIZE(filters), 4);

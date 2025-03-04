@@ -55,6 +55,7 @@ enum Filter {
     Thinning,
     Kuwahara,
     Blur,
+    EdgeDetection,
 };
 
 int correctRGB(int channel);
@@ -75,8 +76,9 @@ void crt(unsigned char* imageData, unsigned char* sourceImageCopy, int imageWidt
 void voronoi(unsigned char* imageData, int pixelDataLen, int width, int height, FilterParameters& params);
 void thinning(unsigned char* imageData, int pixelDataLen, int width, int height, FilterParameters& params);
 void dots(unsigned char* pixelData, int pixelDataLen, int imageWidth, int imageHeight, SDL_Renderer* renderer);
+void edgeDetection(unsigned char* imageData, unsigned char* sourceImageCopy, int width, int height);
 
-// kuwahara filter
+// Kuwahara filter
 void kuwahara_helper(unsigned char* imageData, unsigned char* sourceImageCopy, int width, int height, int row, int col, FilterParameters& params);
 void kuwahara(unsigned char* imageData, unsigned char* sourceImageCopy, int imageWidth, int imageHeight, FilterParameters& params);
 
