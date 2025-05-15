@@ -1117,6 +1117,13 @@ void showImageEditor(SDL_Window* window, SDL_Renderer* renderer){
             }
         }
         
+        if(filtersWithParams[Filter::Blur]){
+            ImGui::Text("blur filter parameters");
+            if(ImGui::SliderInt("blur factor", &filterParams.blurFactor, 1, 8)){
+                doFilter(imageWidth, imageHeight, Filter::Blur, filterParams, isGif, gifFrames);
+            }
+        }
+        
         // spacer
         ImGui::Dummy(ImVec2(0.0f, 5.0f));
         
