@@ -56,7 +56,7 @@ std::vector<int> getRgb(unsigned char* pixelData, int row, int col, int width, i
   return rgb;
 }
 
-float getStdDev(std::vector<float> vValues){
+float getStdDev(std::vector<float>& vValues){
   float sum = 0;
   float total = 0;
   int numVals = (int)vValues.size();
@@ -662,16 +662,16 @@ void blur(unsigned char* imageData, int imageWidth, int imageHeight, FilterParam
     blueChannel[i/4] = (int)imageData[i + 2];
   }
   
-  float blurFactor = 3; // TODO: make this a param (also maybe don't make it a float)
+  float blurFactor = (float)params.blurFactor;
   
   gaussBlur(redChannel, redChannel, imageWidth, imageHeight, blurFactor);
   gaussBlur(greenChannel, greenChannel, imageWidth, imageHeight, blurFactor);
   gaussBlur(blueChannel, blueChannel, imageWidth, imageHeight, blurFactor);
   
   for(int i = 0; i <= dataLength - 4; i += 4){
-    imageData[i] = (unsigned char)redChannel[i/4];
-    imageData[i + 1] = (unsigned char)greenChannel[i/4];
-    imageData[i + 2] = (unsigned char)blueChannel[i/4];
+    imageData[i] = (unsigned char)correctRGB(redChannel[i/4]);
+    imageData[i + 1] = (unsigned char)correctRGB(greenChannel[i/4]);
+    imageData[i + 2] = (unsigned char)correctRGB(blueChannel[i/4]);
   }
 }
 

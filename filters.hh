@@ -40,6 +40,9 @@ struct FilterParameters {
     void generateRandNum3(){
         chanOffsetRandNum = rand() % 3;
     }
+    
+    // for blur
+    int blurFactor = 3;
 };
 
 enum Filter {
@@ -62,6 +65,7 @@ int correctRGB(int channel);
 bool isValidPixel(int row, int col, int width, int height);
 std::vector<float> rgbToHsv(int r, int g, int b);
 std::vector<int> getRgb(unsigned char* pixelData, int row, int col, int width, int height);
+float getStdDev(std::vector<float>& vValues);
 
 void setFilterState(Filter filterToSet, std::map<Filter, bool>& filters);
 void clearFilterState(std::map<Filter, bool>& filters);
